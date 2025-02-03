@@ -54,13 +54,15 @@ $bql = new ExpressionInterpreter();
 
 $variables = [
 'user_country' => 'USA',
-'allowed_countries' => ['USA', 'CAN', 'GBR']
+'allowed_countries' => ['USA', 'CAN', 'GBR'],
+'res' => -1,
+'res2' => -1
 ];
 
 $bql->setVariables($variables);
 
 // Проверяем, находится ли страна в списке разрешённых
-$bql->evaluate("user_country in allowed_countries");
+$bql->evaluate("res = user_country in allowed_countries; res2 = !( user_country in ['GBR', 'ITA', 'MDA'])");
 
 $result = $bql->getModifiedVariables();
 
@@ -76,6 +78,10 @@ class A {
     
     public $var;
     
+    public function __construct($v)
+    {
+        $this->var = $v;
+    }
     public function setValue($value)
     {
         $this->my_value = $value;
@@ -87,23 +93,23 @@ class A {
     }
 }
 
+// index.php
 
-$a = new A();
+$a = new A(15);
 
 $bql = new ExpressionInterpreter();
 
 $variables = [
-    'A' => $a
+    'A' => $a    
 ];
 
 $bql->setVariables($variables);
 
 // Проверяем, находится ли страна в списке разрешённых
-$bql->evaluate("A.a = 5 + 3 * 8; A.var = 'test value';");
-
+$bql->evaluate("A.a = 5 + 3 * 8; A.var = A.a - 7;");
 
 echo "Так поменялся объект a: " . json_encode($a) . PHP_EOL; 
-// index.php
+
 
 
 

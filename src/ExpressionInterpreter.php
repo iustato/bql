@@ -27,7 +27,7 @@ class ExpressionInterpreter
         $this->registerOperator('&&', fn(&$a, $b) => $a && $b, 3, 'right');
         $this->registerOperator('AND', fn(&$a, $b) => $a && $b, 3, 'right');
         $this->registerOperator('||', fn(&$a, $b) => $a || $b, 2);
-        $this->registerOperator('OR', fn(&$a, $b) => $a && $b, 3, 'right');
+        $this->registerOperator('OR', fn(&$a, $b) => $a || $b, 2);
         $this->registerOperator('!', fn(&$a) => !$a, 4, 'right', false, 1);
         $this->registerOperator('<', fn(&$a, $b) => $a < $b, 3);
         $this->registerOperator('>', fn(&$a, $b) => $a > $b, 3);
