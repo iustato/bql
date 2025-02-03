@@ -1,0 +1,20 @@
+{
+    "name": "iustato/bql",
+    "description": "interpreter for simple query language for php projects",
+    "type": "library",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "iustato\\Bql\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "artiom.vasiliev",
+            "email": "artem@bezdnanet.com"
+        }
+    ],
+    "require": {
+        "ext-ctype": "*"
+    }
+}
