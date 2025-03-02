@@ -29,9 +29,11 @@ use Iustato\Bql\ExpressionInterpreter;
 
 $bql = new ExpressionInterpreter();
 
-// Определяем переменные
+$a = 10;
+
+// Определяем переменные. Если мы хотим, что бы значение переменной могло быть изменено интерпретатором, то передаём его по ссылке &$a
 $variables = [
-    'a' => 10,
+    'a' => &$a,
     'b' => 5
 ];
 
@@ -39,11 +41,11 @@ $variables = [
 $bql->setVariables($variables);
 
 // Выполняем выражение
-$bql->evaluate("a + b");
+$bql->evaluate("a = a + b");
 
-$result = $bql->getModifiedVariables();
+$modifVars = $bql->getModifiedVariables();
 
-echo "Результат: " . json_encode($result) . PHP_EOL; // 15
+echo "Результат: " . json_encode($modifVars) . PHP_EOL; // 15
 
 ```
 
@@ -80,7 +82,8 @@ class A {
     
     public function __construct($v)
     {
-        $this->var = $v;
+        $this->my_value = $v;
+        $this->var = 123;
     }
     public function setValue($value)
     {
@@ -106,7 +109,7 @@ $variables = [
 $bql->setVariables($variables);
 
 // Проверяем, находится ли страна в списке разрешённых
-$bql->evaluate("A.a = 5 + 3 * 8; A.var = A.a - 7;");
+$bql->evaluate("A.Value = 5 + 3 * 8; A.var = A.Value - 7;");
 
 echo "Так поменялся объект a: " . json_encode($a) . PHP_EOL; 
 
