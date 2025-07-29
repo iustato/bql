@@ -479,7 +479,16 @@ class ExpressionInterpreter
             $this->usedVariables[$token->getValue()] = $varHandler->get();
         }
 
-        return $varHandler;
+        if ( $varHandler instanceof AbstractVariableHandler)
+        {
+            return $varHandler;
+        }
+        else
+        {
+            $varHandler = VariableHandlerFactory::createHandlerByTokenValue($token, $token->getValue(), $token->getValue());
+            return $varHandler;
+        }
+
     }
 
 }
