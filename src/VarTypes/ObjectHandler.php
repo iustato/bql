@@ -104,4 +104,24 @@ class ObjectHandler extends AbstractVariableHandler
 
         return '';
     }
+
+    public function operatorCall(string $operator, ?AbstractVariableHandler $varB): ?AbstractVariableHandler
+    {
+        // TODO: Implement operatorCall() method.
+    }
+
+    public function toString()
+    {
+        // TODO: Implement toString() method.
+    }
+
+    public function toNum()
+    {
+        // TODO: Implement toNum() method.
+    }
+
+    public function convertToMe(AbstractVariableHandler $var)
+    {
+        throw new \Exception("can not convert ".get_class($var)." to ".__CLASS__);
+    }
 }

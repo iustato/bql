@@ -8,8 +8,12 @@ class VariableHandlerFactory
 {
     /** @var array Список доступных обработчиков */
     private static array $availableHandlers = [
-        VarTypes\ArrayHandler::class,
         VarTypes\ObjectHandler::class,
+        VarTypes\BoolVarHandler::class,
+        VarTypes\NumVarHandler::class,
+
+        VarTypes\StringVarHandler::class,
+        VarTypes\ArrayHandler::class,
         VarTypes\SimpleVarHandler::class
     ];
 
@@ -18,6 +22,9 @@ class VariableHandlerFactory
      */
     public static function createHandler(&$variable, $name, $parent = null): ?AbstractVariableHandler
     {
+        if ($variable instanceof  AbstractVariableHandler)
+            return  $variable;
+
         foreach (VariableHandlerFactory::$availableHandlers as $handlerClass) {
             if ($handlerClass::supports($variable)) {
                 return new $handlerClass($name, $variable, $parent);
@@ -32,8 +39,9 @@ class VariableHandlerFactory
     {
         switch ($token->getType()) {
             case 'number':
+                return new VarTypes\NumVarHandler($name,$variable);
             case 'string':
-                return new VarTypes\SimpleVarHandler($variable, $name, null, $token->getType());
+                return new VarTypes\StringVarHandler($name, $variable);
             case 'array':
                 $elements = array_map('trim', explode(',', trim($token->getValue(), '[]')));
 

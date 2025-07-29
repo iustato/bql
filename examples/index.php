@@ -29,8 +29,19 @@ require 'Customer.php';
 
 
 use iustato\Bql\ExpressionInterpreter;
+use iustato\Bql\VarTypes\StringVarHandler;
 
+/*
+$varA = 'aa';
+$varB = 'bb';
+    $objA = new StringVarHandler('varA', $varA);
+    $objB = new StringVarHandler('varB', $varB);
 
+    $result = $objA->operatorCall('=', $objB);
+
+    var_dump($varA);
+
+return;*/
 
     $bql = new ExpressionInterpreter();
 
@@ -78,11 +89,14 @@ $rand_customer = rand(0,count($customers_list) -1);
     echo "<p> <b>current_order:</b> <br />";
     var_dump($current_order);
 
+    $ResultVar = 'aa';
+
     echo "</p> \n <br />";
     $bql->setVariables([
+        'ResultVar' => &$ResultVar,
         'Result' => &$ResultArr,    // ATTENTION !!! Indicate Arrays by link, if interpreter need to change its values
         'Order' => $current_order,
-        'producer_countries_with_discounts' => ['FIN', 'USA', 'GEO'],
+        'producer_countries_with_discounts' => ['FIN', 'USA', 'GEO', 'ITA', 'DEU'],
         'prohibited_countries' => ['IRN', 'AFG']
         ]
     );
@@ -91,25 +105,37 @@ $rand_customer = rand(0,count($customers_list) -1);
 
     $expr = "Order.Allow = !(Order.Customer.Country in prohibited_countries); Result.AllowPay = Order.Allow; Result.HaveDiscount = (Order.Totalwithoutdiscount > 5000 && Order.Goods.Producer_country in producer_countries_with_discounts); Result.IsApple = Order.Goods.Producer_name like '%apple%'";
 
+    //$expr = "ResultVar = 'new_value123'; ResultVar = ResultVar + '456'; Order.Deny = (Order.Customer.Country in prohibited_countries); Result.HaveDiscount = (Order.Totalwithoutdiscount > 5000 && Order.Goods.Producer_country in producer_countries_with_discounts); Result.IsApple = Order.Goods.Producer_name like '%apple%';";
+
     echo $expr;
 
     echo " \n </p> \n ";
 
-    $bql->evaluate($expr);
+    $rez = $bql->evaluate($expr);
 
     echo "<p> <b>modified variables by interpreter:</b> \n <br />";
     var_dump($bql->getModifiedVariables());
 
+    //    echo "Deny: ".$current_order->getDeny();
     echo "</p> \n ";
-
+/*
+    echo "<p> Variables: <br />";
+    var_dump($bql->getVariables());
+    echo "</p>";*/
+    /*
     echo "<p> <b>current_order after interpreeter works: </b> \n <br />";
     var_dump($current_order);
     echo " \n </p> \n ";
 
+
     echo "<p> <b>ResultArr values: </b> \n <br />";
+    var_dump($ResultArr);*/
+    var_dump($current_order->getAllow());
+    echo "</p> \n ";
+
     var_dump($ResultArr);
 
-    echo "</p> \n ";
+    //var_dump($rez);
     /*
      *  Значение allow_order будет меняться в $current_order
      *

@@ -4,7 +4,7 @@ namespace iustato\Bql\VarTypes;
 
 class SimpleVarHandler extends AbstractVariableHandler
 {
-    private $var;
+    protected $var;
 
     public function __construct($name, &$var, $parent = null, $type = '')
     {
@@ -27,7 +27,18 @@ class SimpleVarHandler extends AbstractVariableHandler
     public function set(string $key, &$value, bool $setCurrent = false): void
     {
         if ($this->parent == null || $setCurrent) {
-            $this->var = &$value;
+            if ($value instanceof AbstractVariableHandler) {
+                // получаем ссылку из нашей переменной
+                $var_ref = &$this->get();
+                // записываем значение ПО ссылке
+                $var_ref = $value->get($key);
+            } else {
+                // получаем ссылку из нашей переменной
+                $var_ref = &$this->get();
+
+                // записываем значение ПО ссылке
+                $var_ref = $value;
+            }
         } else {
             $this->parent->set($this->name, $value, true);
         }
@@ -36,5 +47,31 @@ class SimpleVarHandler extends AbstractVariableHandler
     public function has(string $key): string
     {
         return '';
+    }
+
+    public function operatorCall(string $operator, ?AbstractVariableHandler $varB): ?AbstractVariableHandler
+    {
+        switch ($operator)
+        {
+            case '=':
+                return $varB;
+            default:
+                throw new \Exception("incorrect operator ".$operator." for ".__CLASS__);
+        }
+    }
+
+    public function toString()
+    {
+        // TODO: Implement toString() method.
+    }
+
+    public function toNum()
+    {
+        // TODO: Implement toNum() method.
+    }
+
+    public function convertToMe(AbstractVariableHandler $var)
+    {
+        // TODO: Implement convertToMe() method.
     }
 }

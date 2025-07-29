@@ -43,4 +43,14 @@ class Order
     {
         return $this->allow_order;
     }
+
+    public function setDeny(bool $value)
+    {
+        $this->allow_order = !$value;
+    }
+
+    public function getDeny(): bool
+    {
+        return !$this->allow_order;
+    }
 }

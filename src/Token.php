@@ -2,6 +2,8 @@
 
 namespace iustato\Bql;
 
+use iustato\Bql\VarTypes\AbstractVariableHandler;
+
 class Token
 {
     private string $type;
@@ -9,8 +11,16 @@ class Token
 
     public function __construct(string $type, mixed $value)
     {
-        $this->type = $type;
-        $this->value = $value;
+        if ($value instanceof AbstractVariableHandler)
+        {
+            $this->type = $value->getType();
+            $this->value = $value->get();
+        }
+        else
+        {
+            $this->type = $type;
+            $this->value = $value;
+        }
     }
 
     public function getType(): string

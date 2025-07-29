@@ -19,6 +19,7 @@ class ExpressionInterpreter
 
     public function __construct()
     {
+
         // Регистрация операторов
         $this->registerOperator('=', function (&$a, $b) {
             $a = $b;
@@ -67,6 +68,7 @@ class ExpressionInterpreter
         $this->variables['null'] = new SimpleVarHandler('null', $null);;
     }
 
+
     public function registerOperator(string $operator, callable $callback, int $precedence, string $associativity = 'left', bool $modifiesVariable = false, int $operandCount = 2): void
     {
         $operator_lower = strtolower($operator);
@@ -91,30 +93,23 @@ class ExpressionInterpreter
         $token_value = $a->getValue();
         $var_a = $this->resolveValue($a);
 
-        $null = null;
-        if (isset($var_a)) {
-            $var_a_value = &$var_a->get();
-        } else {
-            $var_a_value = &$null;
-        }
-
-        if (isset($b)) {
+        if ($operatorConfig['operandCount'] == 2)
+        {
             $var_b = $this->resolveValue($b);
-            $var_b_value = $var_b->get();
-        } else {
+        }
+        else
+        {
             $var_b = null;
-            $var_b_value = null;
         }
 
-        //     \log::log_message('debug', "call ".$operator_lower." callback_func: ".var_export($operatorConfig['callback'],true));
-        //$result = call_user_func($operatorConfig['callback'], $var_a_value, $var_b_value);
-        // ебучий call_user_func плюёт на передачу параметра по ссылке и передат копию значения
-        $result = ($operatorConfig['callback'])($var_a_value, $var_b_value);
+
+        $result = $var_a->operatorCall($operator, $var_b);
+
         if ($operatorConfig['modifiesVariable']) {
             $variable = $this->resolveValue($a);  //$this->variables[$token_value];
-            $variable->set( '', $result);
+            $variable->set( '', $result->get());
 
-            $this->modifiedVariables[$token_value] = $result;
+            $this->modifiedVariables[$token_value] = $result->get();
         }
 
         return $result;
@@ -197,11 +192,15 @@ class ExpressionInterpreter
             $char = $expression[$i];
 
             if ($state == 'string') {
-                $currentToken .= $char;
+
                 if ($char === "'") {
                     $tokens[] = new Token('string', $currentToken);
                     $currentToken = '';
                     $state = 'default';
+                }
+                else
+                {
+                    $currentToken .= $char;
                 }
                 continue;
             } elseif ($char === ';') {
@@ -256,7 +255,7 @@ class ExpressionInterpreter
                         $currentToken .= $char;
                         $state = 'number';
                     } elseif ($char === "'") {
-                        $currentToken .= $char;
+                        $currentToken .= "";    //$char;
                         $state = 'string';
                     } elseif ($char === '[') {
                         $currentToken .= $char;
@@ -431,7 +430,24 @@ class ExpressionInterpreter
                 }
 
                 // Добавляем результат обратно в стек
-                $stack[] = new Token('result', $result);
+                if (!empty($result))
+                {
+                    $stack[] = new Token('variable', $result);
+                    //$result_value = (int)$result->get();
+                    /*
+                    if ($result instanceof AbstractVariableHandler)
+                    {
+                        $stack[] = $result;
+                    }
+                    else
+                    {
+                        $stack[] = new Token('result', $result);
+                    }*/
+
+                        //
+                }
+
+                    //
             }
         }
 
@@ -451,6 +467,12 @@ class ExpressionInterpreter
     private function &resolveValue(Token $token): ?AbstractVariableHandler
     {
         $null = null;
+
+        if ($token->getType() == 'variable')
+        {
+            $varHandler = $token->getValue();
+            return $varHandler;
+        }
 
         if ($token->getType() == 'identifier') {
             // Разделяем ключи на уровне по точке

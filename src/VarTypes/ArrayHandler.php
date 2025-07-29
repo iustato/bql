@@ -50,4 +50,45 @@ class ArrayHandler extends AbstractVariableHandler
         else
             return '';
     }
+
+    public function operatorCall(string $operator, ?AbstractVariableHandler $varB): ?AbstractVariableHandler
+    {
+        switch (strtolower($operator))
+        {
+            case '=':
+                if (!($varB instanceof ArrayHandler))
+                {
+                    throw new \InvalidArgumentException("Right-hand side must be an array");
+                }
+
+                $this->array = $varB->array;
+
+                return $varB;
+
+            /*
+            case 'in':
+                if (!is_array($varB->get())) {
+                    throw new InvalidArgumentException("Right-hand side of 'in' must be an array");
+                }
+                $value
+                return in_array($this->array, $varB->get());*/
+            default:
+                throw new \Exception("incorrect operator ".$operator." for ".__CLASS__);
+        }
+    }
+
+    public function toString()
+    {
+        // TODO: Implement toString() method.
+    }
+
+    public function toNum()
+    {
+        // TODO: Implement toNum() method.
+    }
+
+    public function convertToMe(AbstractVariableHandler $var)
+    {
+        // TODO: Implement convertToMe() method.
+    }
 }

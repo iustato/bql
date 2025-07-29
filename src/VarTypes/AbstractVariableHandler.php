@@ -27,8 +27,19 @@ abstract class AbstractVariableHandler
      */
     abstract public function has(string $key): string;
 
+    abstract public function operatorCall(string $operator, ?AbstractVariableHandler $varB): ?AbstractVariableHandler;
+
+    abstract public function toString();
+
+    abstract public function toNum();
+
+    abstract public function convertToMe (AbstractVariableHandler $var);
+
     public function getType()
     {
-        return $this->type;
+        if (isset($this->type))
+            return $this->type;
+        else
+            return '';
     }
 }
