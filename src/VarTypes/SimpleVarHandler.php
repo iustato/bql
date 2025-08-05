@@ -2,16 +2,18 @@
 
 namespace iustato\Bql\VarTypes;
 
+use iustato\Bql\VariableStorage;
+
 class SimpleVarHandler extends AbstractVariableHandler
 {
     protected $var;
 
-    public function __construct($name, &$var, $parent = null, $type = '')
+    public function __construct($name, &$var, $parent = null, ?VariableStorage $storage = null)
     {
-        $this->name = (string)$name;
-        $this->var = $var !== null ? trim($var, "'") : null;
-        $this->parent = $parent;
-        $this->type = $type;
+        parent::__construct((string)$name, $var, $parent, $storage);
+        $this->var = &$var;
+        $this->type = '';
+
     }
 
     public static function supports($variable): bool
@@ -57,6 +59,15 @@ class SimpleVarHandler extends AbstractVariableHandler
                 return $varB;
             default:
                 throw new \Exception("incorrect operator ".$operator." for ".__CLASS__);
+        }
+    }
+
+    public function operatorUnaryCall(string $operator): ?AbstractVariableHandler
+    {
+        switch ($operator)
+        {
+            default:
+                throw new \Exception("incorrect unary operator ".$operator." for ".__CLASS__);
         }
     }
 

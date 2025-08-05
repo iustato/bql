@@ -107,9 +107,32 @@ class ObjectHandler extends AbstractVariableHandler
 
     public function operatorCall(string $operator, ?AbstractVariableHandler $varB): ?AbstractVariableHandler
     {
-        // TODO: Implement operatorCall() method.
+        switch ($operator)
+        {
+            case '=':
+                return $varB;
+            case '??':
+                if (is_null($this->object))
+                {
+                    return $varB;
+                }
+                else
+                {
+                    return $this->object;
+                }
+            default:
+                throw new \Exception("incorrect operator ".$operator." for ".__CLASS__);
+        }
     }
 
+    public function operatorUnaryCall(string $operator): ?AbstractVariableHandler
+    {
+        switch ($operator)
+        {
+            default:
+                throw new \Exception("incorrect unary operator ".$operator." for ".__CLASS__);
+        }
+    }
     public function toString()
     {
         // TODO: Implement toString() method.

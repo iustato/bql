@@ -113,8 +113,8 @@ $rand_customer = rand(0,count($customers_list) -1);
 
     $rez = $bql->evaluate($expr);
 
-    echo "<p> <b>modified variables by interpreter:</b> \n <br />";
-    var_dump($bql->getModifiedVariables());
+    echo "<p> <b>variable storage:</b> \n <br />";
+    var_dump($bql->variableStorage);
 
     //    echo "Deny: ".$current_order->getDeny();
     echo "</p> \n ";

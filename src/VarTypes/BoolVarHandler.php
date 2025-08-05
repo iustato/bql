@@ -2,13 +2,16 @@
 
 namespace iustato\Bql\VarTypes;
 
+use iustato\Bql\VariableStorage;
+
 class BoolVarHandler extends SimpleVarHandler
 {
     protected $var;
 
-    public function __construct($name, &$var, $parent = null, $type = '')
+    public function __construct($name, &$var, $parent = null, ?VariableStorage $storage = null)
     {
-        $this->name = (string)$name;
+        parent::__construct($name, $var, $parent, $storage);
+        
         if ($var == true)
         {
             $this->var = true;
@@ -17,10 +20,8 @@ class BoolVarHandler extends SimpleVarHandler
         {
             $this->var = false;
         }
-
-       //  = $var !== null ? $var : false;
-        $this->parent = $parent;
-        $this->type = $type;
+        
+        $this->type = 'boolean';
     }
 
     public static function supports($variable): bool
@@ -35,29 +36,42 @@ class BoolVarHandler extends SimpleVarHandler
             case '=':
                 return $varB;
             case '&&':
-                $value = $this->var && $this->convertToMe($varB);
-                return new BoolVarHandler('unknown'.rand(0,9999), $value);
+                $value = $this->var && $this->convertToMe($varB)->var;
+                $anonymousName = $this->registerAnonymous(new BoolVarHandler('temp', $value, null, $this->storage));
+                return new BoolVarHandler($anonymousName, $value, null, $this->storage);
             case '||':
-                $value = $this->var || $this->convertToMe($varB);
-                return new BoolVarHandler('unknown'.rand(0,9999), $value);
+                $value = $this->var || $this->convertToMe($varB)->var;
+                $anonymousName = $this->registerAnonymous(new BoolVarHandler('temp', $value, null, $this->storage));
+                return new BoolVarHandler($anonymousName, $value, null, $this->storage);
             case '==':
-                $value = $this->var == $this->convertToMe($varB);
-                return new BoolVarHandler('unknown'.rand(0,9999), $value);
+                $value = $this->var == $this->convertToMe($varB)->var;
+                $anonymousName = $this->registerAnonymous(new BoolVarHandler('temp', $value, null, $this->storage));
+                return new BoolVarHandler($anonymousName, $value, null, $this->storage);
             case '!=':
-                $value = $this->var != $this->convertToMe($varB);
-                return new BoolVarHandler('unknown'.rand(0,9999), $value);
-            case '!':
-                $value = !$this->var;
-                return new BoolVarHandler('unknown'.rand(0,9999), $value);
+                $value = $this->var != $this->convertToMe($varB)->var;
+                $anonymousName = $this->registerAnonymous(new BoolVarHandler('temp', $value, null, $this->storage));
+                return new BoolVarHandler($anonymousName, $value, null, $this->storage);
+
             default:
                 throw new \Exception("incorrect operator ".$operator." for ".__CLASS__);
         }
     }
 
-    public function convertToMe (AbstractVariableHandler $var)
+    public function operatorUnaryCall(string $operator): ?AbstractVariableHandler
     {
-        //BoolVarHandler
-
+        switch ($operator)
+        {
+            case '!':
+                $value = !$this->var;
+                $anonymousName = $this->registerAnonymous(new BoolVarHandler('temp', $value, null, $this->storage));
+                return new BoolVarHandler($anonymousName, $value, null, $this->storage);
+                break;
+            default:
+                throw new \Exception("incorrect unary operator ".$operator." for ".__CLASS__);
+        }
+    }
+    public function convertToMe(AbstractVariableHandler $var): BoolVarHandler
+    {
         if ($var instanceof BoolVarHandler)
         {
             return $var;
@@ -66,38 +80,23 @@ class BoolVarHandler extends SimpleVarHandler
         if ($var instanceof StringVarHandler)
         {
             $var_value = $var->get();
-            if (!empty($var_value))
-            {
-                return new BoolVarHandler(true);
-            }
-            else
-            {
-                return new BoolVarHandler(false);
-            }
+            $value = !empty($var_value);
+            return new BoolVarHandler('temp', $value, null, $this->storage);
         }
 
         if ($var instanceof NumVarHandler)
         {
             $var_value = $var->get();
-
-            if (intval($var_value) > 0)
-            {
-                return new BoolVarHandler(true);
-            }
-            else
-            {
-                return new BoolVarHandler(false);
-            }
+            $value = intval($var_value) > 0;
+            return new BoolVarHandler('temp', $value, null, $this->storage);
         }
 
         throw new \Exception("can not convert ".get_class($var)." to ".__CLASS__);
-
     }
 
     public function &get(string $key = '')
     {
-       // if ($this->var == true)
-            return $this->var;
+        return $this->var;
     }
 
     public function toString(): StringVarHandler
@@ -105,12 +104,12 @@ class BoolVarHandler extends SimpleVarHandler
         if ($this->var == true)
         {
             $value = 'true';
-            return new StringVarHandler('', $value);
+            return new StringVarHandler('temp', $value, null, $this->storage);
         }
         else
         {
             $value = 'false';
-            return new StringVarHandler('', $value);
+            return new StringVarHandler('temp', $value, null, $this->storage);
         }
     }
 
@@ -119,17 +118,17 @@ class BoolVarHandler extends SimpleVarHandler
         if ($this->var == true)
         {
             $value = 1;
-            return new NumVarHandler('', $value);
+            return new NumVarHandler('temp', $value, null, $this->storage);
         }
         else
         {
             $value = 0;
-            return new NumVarHandler('', $value);
+            return new NumVarHandler('temp', $value, null, $this->storage);
         }
     }
 
     public function has(string $key): string
     {
-        // TODO: Implement has() method.
+        return '';
     }
 }

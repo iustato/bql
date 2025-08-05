@@ -2,78 +2,59 @@
 
 namespace iustato\Bql;
 
-use iustato\Bql\VarTypes\SimpleVarHandler;
 use InvalidArgumentException;
 use LogicException;
 use iustato\Bql\VarTypes\AbstractVariableHandler;
 
 class ExpressionInterpreter
 {
-    /* @var AbstractVariableHandler[] $variables */
-    private array $variables = [];
-    private $operators = [];
-
-    private $modifiedVariables = [];
-
-    private $usedVariables = [];
+    public VariableStorage $variableStorage;
+    private array $operators = [];
 
     public function __construct()
     {
+        $this->variableStorage = new VariableStorage();
 
         // Регистрация операторов
-        $this->registerOperator('=', function (&$a, $b) {
-            $a = $b;
-            return $a;
-        }, 1, 'left', true, 2);
-        $this->registerOperator('&&', fn(&$a, $b) => $a && $b, 3, 'right');
-        $this->registerOperator('AND', fn(&$a, $b) => $a && $b, 3, 'right');
-        $this->registerOperator('||', fn(&$a, $b) => $a || $b, 2);
-        $this->registerOperator('OR', fn(&$a, $b) => $a || $b, 2);
-        $this->registerOperator('!', fn(&$a) => !$a, 4, 'right', false, 1);
-        $this->registerOperator('<', fn(&$a, $b) => $a < $b, 3);
-        $this->registerOperator('>', fn(&$a, $b) => $a > $b, 3);
-        $this->registerOperator('<=', fn(&$a, $b) => $a <= $b, 3);
-        $this->registerOperator('>=', fn(&$a, $b) => $a >= $b, 3);
-        $this->registerOperator('==', fn(&$a, $b) => trim($a) === trim($b), 3);
-        $this->registerOperator('!=', fn(&$a, $b) => $a != $b, 3);
-        $this->registerOperator('??', function(&$a, $b)
-        {
-            if (is_null($a)) return $b;
-            else return $a;
-        } , 3);
-        $this->registerOperator('in', function (&$a, $b) {
-            if (!is_array($b)) {
-                throw new InvalidArgumentException("Right-hand side of 'in' must be an array");
-            }
-            return in_array($a, $b);
-        }, 3);
-        $this->registerOperator('like', function (&$a, $b) {
-            $pattern = '/^' . str_replace(['%', '_'], ['.*', '.'], preg_quote($b, '/')) . '$/i';
-            return preg_match($pattern, $a) === 1;
-        }, 3);
+        $this->registerOperator('=', 1, 'left', true, 2);
+        $this->registerOperator('&&', 3, 'right');
+        $this->registerOperator('AND', 3, 'right');
+        $this->registerOperator('||', 2);
+        $this->registerOperator('OR', 2);
+        $this->registerOperator('!', 4, 'right', false, 1);
+        $this->registerOperator('<', 3);
+        $this->registerOperator('>', 3);
+        $this->registerOperator('<=', 3);
+        $this->registerOperator('>=', 3);
+        $this->registerOperator('==', 3);
+        $this->registerOperator('!=', 3);
+        $this->registerOperator('??', 3);
+        $this->registerOperator('in', 3);
+        $this->registerOperator('like', 3);
 
-        $this->registerOperator('+', fn(&$a, $b) => $a + $b, 3, 'left', false, 2);
-        $this->registerOperator('-', fn(&$a, $b) => $a - $b, 3, 'left', false, 2);
-        $this->registerOperator('*', fn(&$a, $b) => $a * $b, 4, 'left', false, 2);
-        $this->registerOperator('/', fn(&$a, $b) => $b == 0 ? throw new InvalidArgumentException("Division by zero") : $a / $b, 4, 'left', false, 2);
-        $this->registerOperator('++', fn(&$a) => ++$a, 5, 'right', true, 1);
-        $this->registerOperator('--', fn(&$a) => --$a, 5, 'right', true, 1);
-        $this->registerOperator('+=', fn(&$a, $b) => $a += $b, 3, 'left', true, 2);
-        $this->registerOperator('-=', fn(&$a, $b) => $a -= $b, 3, 'left', true, 2);
+        $this->registerOperator('+', 3, 'left', false, 2);
+        $this->registerOperator('-', 3, 'left', false, 2);
+        $this->registerOperator('*', 4, 'left', false, 2);
+        $this->registerOperator('/', 4, 'left', false, 2);
+        $this->registerOperator('++', 5, 'right', true, 1);
+        $this->registerOperator('--', 5, 'right', true, 1);
+        $this->registerOperator('+=', 3, 'left', true, 2);
+        $this->registerOperator('-=', 3, 'left', true, 2);
 
         // default variables:
+        /*
         $true = true; $false = false; $null = null;
         $this->variables['true'] = new SimpleVarHandler('true', $true);
         $this->variables['false'] = new SimpleVarHandler('false', $false);
         $this->variables['null'] = new SimpleVarHandler('null', $null);;
+        */
     }
 
 
-    public function registerOperator(string $operator, callable $callback, int $precedence, string $associativity = 'left', bool $modifiesVariable = false, int $operandCount = 2): void
+    public function registerOperator(string $operator, int $precedence, string $associativity = 'left', bool $modifiesVariable = false, int $operandCount = 2): void
     {
         $operator_lower = strtolower($operator);
         $this->operators[$operator_lower] = [
-            'callback' => $callback,
             'precedence' => $precedence,
             'associativity' => $associativity,
             'modifiesVariable' => $modifiesVariable,
@@ -81,37 +62,41 @@ class ExpressionInterpreter
         ];
     }
 
-    private function executeOperator(string $operator, Token &$a, Token &$b = null)
+
+    private function executeOperator(string $operator, Token &$a, Token &$b = null): ?AbstractVariableHandler
     {
         $operator_lower = strtolower($operator);
+
         if (!isset($this->operators[$operator_lower])) {
             throw new InvalidArgumentException("Operator '$operator_lower' is not defined.");
         }
 
         $operatorConfig = $this->operators[$operator_lower];
-
-        $token_value = $a->getValue();
         $var_a = $this->resolveValue($a);
 
-        if ($operatorConfig['operandCount'] == 2)
-        {
-            $var_b = $this->resolveValue($b);
-        }
-        else
-        {
-            $var_b = null;
+        // Обработка унарных операторов
+        if ($operatorConfig['operandCount'] === 1) {
+            $result = $var_a->operatorUnaryCall($operator);
+
+            /*
+            // Обработка операторов, изменяющих переменную (++, --)
+            if ($operatorConfig['modifiesVariable']) {
+                $this->handleVariableModification($a, $result);
+            }*/
+
+            return $result;
         }
 
-
+        // Обработка бинарных операторов
+        $var_b = $this->resolveValue($b);
         $result = $var_a->operatorCall($operator, $var_b);
 
+        /*
+        // Обработка операторов, изменяющих переменную (=, +=, -=)
         if ($operatorConfig['modifiesVariable']) {
-            $variable = $this->resolveValue($a);  //$this->variables[$token_value];
-            $variable->set( '', $result->get());
-
-            $this->modifiedVariables[$token_value] = $result->get();
+            $this->handleVariableModification($a, $result);
         }
-
+        */
         return $result;
     }
 
@@ -119,6 +104,7 @@ class ExpressionInterpreter
     {
         return array_keys($this->operators);
     }
+
 
     private function getPrecedence(string $operator): int
     {
@@ -128,33 +114,19 @@ class ExpressionInterpreter
 
     public function setVariables(array $variables): void
     {
-        foreach ($variables as $key => &$value) {
-            // получаем начальные значения переменных, объектов и т.д.
-            $this->variables[$key] = VariableHandlerFactory::createHandler($value, $key, null);
-        }
-
-        $this->modifiedVariables = [];
-    }
-
-    public function addVariable ($var_name, &$var_value)
-    {
-        $this->variables[$var_name] = &$var_value;
+        $this->variableStorage->setVariables($variables);
     }
 
     public function getModifiedVariables(): array
     {
-        return $this->modifiedVariables;
+        return $this->variableStorage->getModifiedVariables();
     }
 
     public function getUsedVariables(): array
     {
-        return $this->usedVariables;
+        return $this->variableStorage->getUsedVariables();
     }
 
-    public function getVariables(): array
-    {
-        return $this->variables;
-    }
 
     public function evaluate(string $expression): array
     {
@@ -426,28 +398,16 @@ class ExpressionInterpreter
                 // Если оператор изменяет переменную, обновляем её значение
                 if ($this->operators[$operator]['modifiesVariable']) {
                     $variableName = $operands[0]->getValue();
-                    $this->variables[$variableName] = $result;
+                    $this->variableStorage->modifyVariable($variableName, $result);
+                    //$this->variables[$variableName] = $result;
                 }
 
                 // Добавляем результат обратно в стек
                 if (!empty($result))
                 {
                     $stack[] = new Token('variable', $result);
-                    //$result_value = (int)$result->get();
-                    /*
-                    if ($result instanceof AbstractVariableHandler)
-                    {
-                        $stack[] = $result;
-                    }
-                    else
-                    {
-                        $stack[] = new Token('result', $result);
-                    }*/
-
-                        //
                 }
 
-                    //
             }
         }
 
@@ -468,40 +428,48 @@ class ExpressionInterpreter
     {
         $null = null;
 
-        if ($token->getType() == 'variable')
-        {
-            $varHandler = $token->getValue();
-            return $varHandler;
+        if ($token->getType() == 'variable') {
+            $varr = $token->getValue();;
+            return $varr;
         }
 
         if ($token->getType() == 'identifier') {
-            // Разделяем ключи на уровне по точке
             $keys = explode('.', $token->getValue());
+            $varHandler = $this->variableStorage->getVariable($keys[0]);
+            
+            if (!$varHandler) {
+                return $null;
+            }
 
-            $varHandler = $this->variables[$keys[0]];
-
-            // Перебираем вложенные ключи
             for ($i = 1; $i < count($keys); $i++) {
                 $key = $keys[$i];
-
                 if (!empty($varHandler->has($key))) {
                     $currentValue = &$varHandler->get($key);
-                    $varHandler = VariableHandlerFactory::createHandler($currentValue, $key, $varHandler);
+                    $varHandler = VariableHandlerFactory::createHandler($currentValue, $key, $varHandler, $this->variableStorage);
                 } else {
-                    // TODO: warning: identifier not found
                     return $null;
                 }
             }
         } else {
-            $varHandler = VariableHandlerFactory::createHandlerByTokenValue($token, $token->getValue(), $token->getValue());
+            $varHandler = VariableHandlerFactory::createHandlerByTokenValue(
+                $token, 
+                $token->getValue(),
+                $token->getValue(),
+                null,
+                $this->variableStorage
+            );
         }
 
-        if ($token->getType() == 'identifier' && $varHandler instanceof VarTypes\SimpleVarHandler) //&& !in_array($varHandler->getType(),['number', 'string'])
-        {
-            $this->usedVariables[$token->getValue()] = $varHandler->get();
+        if ($token->getType() == 'identifier') {
+            $this->variableStorage->markUsed($token->getValue(), $varHandler->get());
         }
 
         return $varHandler;
+    }
+
+    public function tempSetVar()
+    {
+        $this->variableStorage->modifyVariable('Rez', 25);
     }
 
 }

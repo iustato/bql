@@ -1,12 +1,26 @@
 <?php
-
 namespace iustato\Bql\VarTypes;
+
+use iustato\Bql\VariableStorage;
 
 abstract class AbstractVariableHandler
 {
     protected string $name;
-    protected ?AbstractVariableHandler $parent;  // link to parent object
+    protected ?AbstractVariableHandler $parent;
     protected string $type;
+    protected ?VariableStorage $storage;
+
+    public function __construct(string $name, &$var, ?AbstractVariableHandler $parent = null, ?VariableStorage $storage = null)
+    {
+        $this->name = $name;
+        $this->parent = $parent;
+        $this->storage = $storage;
+    }
+
+    protected function registerAnonymous(AbstractVariableHandler $handler): string {
+        return $this->storage ? $this->storage->addAnonymousVariableHandler($handler) : 'anonymous_' . rand(0, 9999);
+    }
+
     /**
      * Проверяет, поддерживает ли обработчик данный тип переменной.
      */
@@ -27,7 +41,15 @@ abstract class AbstractVariableHandler
      */
     abstract public function has(string $key): string;
 
+    /**
+     * Обработка бинарных операторов.
+     */
     abstract public function operatorCall(string $operator, ?AbstractVariableHandler $varB): ?AbstractVariableHandler;
+
+    /**
+     * Обработка унарных операторов.
+     */
+    abstract public function operatorUnaryCall(string $operator): ?AbstractVariableHandler;
 
     abstract public function toString();
 

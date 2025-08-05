@@ -11,7 +11,6 @@ class VariableHandlerFactory
         VarTypes\ObjectHandler::class,
         VarTypes\BoolVarHandler::class,
         VarTypes\NumVarHandler::class,
-
         VarTypes\StringVarHandler::class,
         VarTypes\ArrayHandler::class,
         VarTypes\SimpleVarHandler::class
@@ -20,28 +19,33 @@ class VariableHandlerFactory
     /**
      * Создаёт обработчик для переменной.
      */
-    public static function createHandler(&$variable, $name, $parent = null): ?AbstractVariableHandler
-    {
-        if ($variable instanceof  AbstractVariableHandler)
-            return  $variable;
-
-        foreach (VariableHandlerFactory::$availableHandlers as $handlerClass) {
-            if ($handlerClass::supports($variable)) {
-                return new $handlerClass($name, $variable, $parent);
-            }
+    public static function createHandler(
+        &$variable,
+        $name,
+        $parent = null,
+        ?VariableStorage $storage = null
+    ): ?AbstractVariableHandler {
+        if ($variable instanceof AbstractVariableHandler) {
+            return $variable;
         }
 
+        foreach (self::$availableHandlers as $handlerClass) {
+            if ($handlerClass::supports($variable)) {
+                return new $handlerClass($name ?: 'anonymous', $variable, $parent, $storage);
+            }
+        }
         return null;
-        //throw new InvalidArgumentException("Unsupported variable type: " . gettype($variable));
     }
 
-    public static function createHandlerByTokenValue(Token $token, $name, $variable, $parent = null): ?AbstractVariableHandler
+    public static function createHandlerByTokenValue(Token $token, $name, $variable, $parent = null, ?VariableStorage $storage = null): ?AbstractVariableHandler
     {
+        $safeName = $name ?: 'anonymous';
+        
         switch ($token->getType()) {
             case 'number':
-                return new VarTypes\NumVarHandler($name,$variable);
+                return new VarTypes\NumVarHandler($safeName, $variable, $parent, $storage);
             case 'string':
-                return new VarTypes\StringVarHandler($name, $variable);
+                return new VarTypes\StringVarHandler($safeName, $variable, $parent, $storage);
             case 'array':
                 $elements = array_map('trim', explode(',', trim($token->getValue(), '[]')));
 
@@ -52,13 +56,11 @@ class VariableHandlerFactory
                     return is_numeric($el) ? (int)$el : $el;
                 }, $elements);
 
-                return new VarTypes\ArrayHandler($name, $value, $parent);
+                return new VarTypes\ArrayHandler($safeName, $value, $parent, $storage);
 
-                break;
             case 'identifier':
             default:
-                return self::createHandler($variable, $parent);
-                break;
+                return self::createHandler($variable, $safeName, $parent, $storage);
         }
     }
 }

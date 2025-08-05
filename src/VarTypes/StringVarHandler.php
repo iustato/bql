@@ -2,23 +2,25 @@
 
 namespace iustato\Bql\VarTypes;
 
+use iustato\Bql\VariableStorage;
 use InvalidArgumentException;
 
 class StringVarHandler extends SimpleVarHandler
 {
     protected $var;
-    public function __construct($name, &$var, $parent = null, $type = '')
+    
+    public function __construct($name, &$var, $parent = null, ?VariableStorage $storage = null)
     {
-        $this->name = (string)$name;
-        // $var !== null ? trim($var, "'") : null;
+        parent::__construct($name, $var, $parent, $storage);
         $this->var = &$var;
-        $this->parent = $parent;
-        $this->type = $type;
+        $this->type = 'string';
     }
+    
     public static function supports($variable): bool
     {
         return !is_object($variable) && !is_array($variable) && is_string($variable);
     }
+    
     public function operatorCall(string $operator, ?AbstractVariableHandler $varB): ?AbstractVariableHandler
     {
         if (empty($varB))
@@ -26,51 +28,56 @@ class StringVarHandler extends SimpleVarHandler
             throw new \Exception("empty varB for operation:".$operator." in ".__CLASS__);
         }
 
-        /*
-        if (!($varB instanceof StringVarHandler))
-        {
-            $varBstring = $varB->toString();
-            $varB = new StringVarHandler($varB->name, $varBstring);
-        }*/
-
         switch ($operator)
         {
             case '=':
-                //$value = &$varB->get();
-                //$this->set($this->name,$varB);
-                return $varB;   //  this
+                return $varB;
             case '+':
-                $value = $this->var.$varB->var;
-                return new StringVarHandler('unknown'.rand(0,9999), $value);
+                $value = $this->var . $varB->get();
+                $anonymousName = $this->registerAnonymous(new StringVarHandler('temp', $value, null, $this->storage));
+                return new StringVarHandler($anonymousName, $value, null, $this->storage);
             case '==':
-                $value = $this->var == $varB->var;
-                return new BoolVarHandler('unknown'.rand(0,9999), $value);
+                $value = $this->var == $varB->get();
+                $anonymousName = $this->registerAnonymous(new BoolVarHandler('temp', $value, null, $this->storage));
+                return new BoolVarHandler($anonymousName, $value, null, $this->storage);
             case '!=':
-                $value = $this->var != $varB->var;
-                return new BoolVarHandler('unknown'.rand(0,9999), $value);
+                $value = $this->var != $varB->get();
+                $anonymousName = $this->registerAnonymous(new BoolVarHandler('temp', $value, null, $this->storage));
+                return new BoolVarHandler($anonymousName, $value, null, $this->storage);
             case 'like':
                 $pattern = '/^' . str_replace(['%', '_'], ['.*', '.'], preg_quote($varB->get(), '/')) . '$/i';
                 $value = preg_match($pattern, $this->get()) === 1;
-                return new BoolVarHandler('unknown'.rand(0,9999), $value);
+                $anonymousName = $this->registerAnonymous(new BoolVarHandler('temp', $value, null, $this->storage));
+                return new BoolVarHandler($anonymousName, $value, null, $this->storage);
             case 'in':
                 if (!is_array($varB->get())) {
                     throw new InvalidArgumentException("Right-hand side of 'in' must be an array");
                 }
                 $value = in_array($this->var, $varB->get());
-                return new BoolVarHandler('unknown'. rand(0,9999), $value);
+                $anonymousName = $this->registerAnonymous(new BoolVarHandler('temp', $value, null, $this->storage));
+                return new BoolVarHandler($anonymousName, $value, null, $this->storage);
             default:
                 throw new \Exception("incorrect operator ".$operator." for ".__CLASS__);
         }
     }
 
+    public function operatorUnaryCall(string $operator): ?AbstractVariableHandler
+    {
+        switch ($operator)
+        {
+            default:
+                throw new \Exception("incorrect unary operator ".$operator." for ".__CLASS__);
+        }
+    }
     public function toString()
     {
         return $this->var;
     }
 
-    public function toNum()
+    public function toNum(): NumVarHandler
     {
-        return new NumVarHandler($this->var);
+        $value = (float)$this->var;
+        return new NumVarHandler('temp', $value, null, $this->storage);
     }
 
     public function convertToMe(AbstractVariableHandler $var)
