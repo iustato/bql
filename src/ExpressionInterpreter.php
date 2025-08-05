@@ -33,7 +33,7 @@ class ExpressionInterpreter
         $this->registerOperator('>', fn(&$a, $b) => $a > $b, 3);
         $this->registerOperator('<=', fn(&$a, $b) => $a <= $b, 3);
         $this->registerOperator('>=', fn(&$a, $b) => $a >= $b, 3);
-        $this->registerOperator('==', fn(&$a, $b) => trim($a) === trim($b), 3);
+        $this->registerOperator('==', fn(&$a, $b) => trim((string)($a ?? '')) === trim((string)($b ?? '')), 3);
         $this->registerOperator('!=', fn(&$a, $b) => $a != $b, 3);
         $this->registerOperator('??', function(&$a, $b)
         {
