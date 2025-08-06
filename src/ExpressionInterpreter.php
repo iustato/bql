@@ -281,10 +281,25 @@ class ExpressionInterpreter
 
                     break;
                 case 'identifier':
+                    if (ctype_alnum($char) || $char === '_') {
+                        $currentToken .= $char;
+                    } elseif ($char === '.') {
+                        // Встретили точку - переходим в состояние sausage (вложенная переменная)
+                        $currentToken .= $char;
+                        $state = 'sausage';
+                    } else {
+                        $tokens[] = new Token('identifier', $currentToken);
+                        $currentToken = '';
+                        $state = 'default';
+                        $i--;
+                    }
+                    break;
+                case 'sausage':
+                    // Состояние для вложенных переменных с точками
                     if (ctype_alnum($char) || in_array($char, ['_', '.'])) {
                         $currentToken .= $char;
                     } else {
-                        $tokens[] = new Token('identifier', $currentToken);
+                        $tokens[] = new Token('sausage', $currentToken);
                         $currentToken = '';
                         $state = 'default';
                         $i--;
@@ -293,9 +308,13 @@ class ExpressionInterpreter
                 case 'identifier_or_operator':
                     if (ctype_alnum($char)) {
                         $currentToken .= $char;
-                    } elseif (in_array($char, ['_', '.'])) {
+                    } elseif ($char === '_') {
                         $currentToken .= $char;
                         $state = 'identifier';
+                    } elseif ($char === '.') {
+                        // Встретили точку - это точно вложенная переменная
+                        $currentToken .= $char;
+                        $state = 'sausage';
                     } else {
                         if (in_array(strtolower($currentToken), $this->getOperators())) {
                             $tokens[] = new Token('operator', strtolower($currentToken));
@@ -307,20 +326,20 @@ class ExpressionInterpreter
                         $i--;
                     }
                     break;
-            }
         }
-
-        if ($currentToken !== '') {
-            $tokens[] = new Token($state, $currentToken);
-        }
-
-        // Добавляем последнюю команду, если есть незавершённые токены
-        if (!empty($tokens)) {
-            $commands[] = $tokens;
-        }
-
-        return $commands;
     }
+
+    if ($currentToken !== '') {
+        $tokens[] = new Token($state, $currentToken);
+    }
+
+    // Добавляем последнюю команду, если есть незавершённые токены
+    if (!empty($tokens)) {
+        $commands[] = $tokens;
+    }
+
+    return $commands;
+}
 
 
     private function toReversePolishNotation(array $tokens): array
@@ -429,28 +448,29 @@ class ExpressionInterpreter
         $null = null;
 
         if ($token->getType() == 'variable') {
-            $varr = $token->getValue();;
+            $varr = $token->getValue();
             return $varr;
         }
 
-        if ($token->getType() == 'identifier') {
-            $keys = explode('.', $token->getValue());
-            $varHandler = $this->variableStorage->getVariable($keys[0]);
+        if ($token->getType() == 'sausage') {
+            // Обработка вложенных переменных через SausageVarHandler
+            $varHandler = VarTypes\SausageVarHandler::createForNestedVariable(
+                $token->getValue(), 
+                $this->variableStorage
+            );
             
             if (!$varHandler) {
                 return $null;
             }
-
-            for ($i = 1; $i < count($keys); $i++) {
-                $key = $keys[$i];
-                if (!empty($varHandler->has($key))) {
-                    $currentValue = &$varHandler->get($key);
-                    $varHandler = VariableHandlerFactory::createHandler($currentValue, $key, $varHandler, $this->variableStorage);
-                } else {
-                    return $null;
-                }
+        } elseif ($token->getType() == 'identifier') {
+            // Обычная переменная без точек
+            $varHandler = $this->variableStorage->getVariable($token->getValue());
+            
+            if (!$varHandler) {
+                return $null;
             }
         } else {
+            // Создание обработчика для литералов (числа, строки, массивы)
             $varHandler = VariableHandlerFactory::createHandlerByTokenValue(
                 $token, 
                 $token->getValue(),
@@ -460,7 +480,8 @@ class ExpressionInterpreter
             );
         }
 
-        if ($token->getType() == 'identifier') {
+        // Отмечаем использование переменной
+        if ($token->getType() == 'identifier' || $token->getType() == 'sausage') {
             $this->variableStorage->markUsed($token->getValue(), $varHandler->get());
         }
 

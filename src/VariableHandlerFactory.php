@@ -8,6 +8,8 @@ class VariableHandlerFactory
 {
     /** @var array Список доступных обработчиков */
     private static array $availableHandlers = [
+        VarTypes\DateTimeVarHandler::class,
+        VarTypes\DateTimeIntervalVarHandler::class,
         VarTypes\ObjectHandler::class,
         VarTypes\BoolVarHandler::class,
         VarTypes\NumVarHandler::class,
@@ -57,6 +59,10 @@ class VariableHandlerFactory
                 }, $elements);
 
                 return new VarTypes\ArrayHandler($safeName, $value, $parent, $storage);
+
+            case 'sausage':
+                // Для токенов типа 'sausage' создаем SausageVarHandler
+                return VarTypes\SausageVarHandler::createForNestedVariable($safeName, $storage);
 
             case 'identifier':
             default:

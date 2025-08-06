@@ -103,7 +103,9 @@ $rand_customer = rand(0,count($customers_list) -1);
 
     echo "<p> <b>Dynamic expression : </b> <br /> \n ";
 
-    $expr = "Order.Allow = !(Order.Customer.Country in prohibited_countries); Result.AllowPay = Order.Allow; Result.HaveDiscount = (Order.Totalwithoutdiscount > 5000 && Order.Goods.Producer_country in producer_countries_with_discounts); Result.IsApple = Order.Goods.Producer_name like '%apple%'";
+    $expr = "Order.CreateTime = Order.CreateTime + '1 year';";
+
+    //$expr = "Order.Allow = !(Order.Customer.Country in prohibited_countries); Order.CreateTime = '2025-05-17 23:12:01' + '15 minute' ; Result.AllowPay = Order.Allow; Result.HaveDiscount = (Order.Totalwithoutdiscount > 5000 && Order.Goods.Producer_country in producer_countries_with_discounts); Result.IsApple = Order.Goods.Producer_name like '%apple%'";
 
     //$expr = "ResultVar = 'new_value123'; ResultVar = ResultVar + '456'; Order.Deny = (Order.Customer.Country in prohibited_countries); Result.HaveDiscount = (Order.Totalwithoutdiscount > 5000 && Order.Goods.Producer_country in producer_countries_with_discounts); Result.IsApple = Order.Goods.Producer_name like '%apple%';";
 
@@ -125,15 +127,19 @@ $rand_customer = rand(0,count($customers_list) -1);
     /*
     echo "<p> <b>current_order after interpreeter works: </b> \n <br />";
     var_dump($current_order);
-    echo " \n </p> \n ";
+    echo " \n </p> \n ";*/
 
 
     echo "<p> <b>ResultArr values: </b> \n <br />";
-    var_dump($ResultArr);*/
-    var_dump($current_order->getAllow());
+    var_dump($ResultArr);
+    //var_dump($current_order->getAllow());
     echo "</p> \n ";
 
-    var_dump($ResultArr);
+    var_dump($current_order);
+
+    echo "<p> GetModifiedVariables :";
+    var_dump($bql->variableStorage->getModifiedVariables());
+    echo "</p>";
 
     //var_dump($rez);
     /*

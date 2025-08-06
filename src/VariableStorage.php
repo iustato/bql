@@ -24,13 +24,18 @@ class VariableStorage {
         $this->variables[$name] = VariableHandlerFactory::createHandler($value, $name, null, $this);
     }
 
-    public function modifyVariable (string $name, $value): void {
+    public function modifyVariable(string $name, $value): void {
+        if (!isset($this->variables[$name])) {
+            return; // Переменная не найдена
+        }
+        
         $this->variables[$name]->set($name, $value, true);
 
-        if ($value instanceof AbstractVariableHandler)
+        if ($value instanceof AbstractVariableHandler) {
             $this->modifiedVariables[$name] = $value->get();
-        else
+        } else {
             $this->modifiedVariables[$name] = $value;
+        }
     }
 
     public function setVariables(array $variables): void {
