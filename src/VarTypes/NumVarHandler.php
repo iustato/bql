@@ -2,6 +2,7 @@
 
 namespace iustato\Bql\VarTypes;
 
+use InvalidArgumentException;
 use iustato\Bql\VariableStorage;
 
 class NumVarHandler extends SimpleVarHandler
@@ -74,6 +75,13 @@ class NumVarHandler extends SimpleVarHandler
                 return new BoolVarHandler($anonymousName, $value, null, $this->storage);
             case '<=':
                 $value = $this->var <= (float)$varB->get();
+                $anonymousName = $this->registerAnonymous(new BoolVarHandler('temp', $value, null, $this->storage));
+                return new BoolVarHandler($anonymousName, $value, null, $this->storage);
+            case 'in':
+                if (!is_array($varB->get())) {
+                    throw new InvalidArgumentException("Right-hand side of 'in' must be an array");
+                }
+                $value = in_array($this->var, $varB->get());
                 $anonymousName = $this->registerAnonymous(new BoolVarHandler('temp', $value, null, $this->storage));
                 return new BoolVarHandler($anonymousName, $value, null, $this->storage);
             default:

@@ -39,6 +39,7 @@ $results = [
     'isNormalAge' => false,
     'isNormalName' => false,
     'isUndefinedKey' => false,
+    'testrez' => false
 ];
 
 $interpreter = new ExpressionInterpreter();
@@ -79,4 +80,6 @@ var_dump(  $results['isNormalName']);
 var_dump($interpreter->getUsedVariables());;
 
 
+$interpreter->evaluate("results.testrez = data.age in [ '25', '61', '42.00']");
 
+var_dump($interpreter->getUsedVariables());;
