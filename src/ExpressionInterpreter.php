@@ -469,7 +469,18 @@ class ExpressionInterpreter
             if (!$varHandler) {
                 return $null;
             }
-        } else {
+
+        } /* elseif ($token->getType() == 'datetime') {
+            $varHandler = VariableHandlerFactory::createHandlerByTokenValue(
+                $token,
+                $token->getValue(),
+                $token->getValue(),
+                null,
+                $this->variableStorage
+            );
+        }*/
+        else
+        {
             // Создание обработчика для литералов (числа, строки, массивы)
             $varHandler = VariableHandlerFactory::createHandlerByTokenValue(
                 $token, 

@@ -45,7 +45,7 @@ class DateTimeIntervalVarHandler extends AbstractVariableHandler
                    (bool)preg_match('/^P(\d+Y)?(\d+M)?(\d+D)?(T(\d+H)?(\d+M)?(\d+S)?)?$/', $variable);
         }
         
-        return is_numeric($variable);
+        return false;
     }
 
     private function parseStringInterval(string $intervalString): void
@@ -305,6 +305,12 @@ class DateTimeIntervalVarHandler extends AbstractVariableHandler
             case '<=':
             case '==':
             case '!=':
+            if ($varB instanceof StringVarHandler)
+            {
+                $varC = new DateTimeIntervalVarHandler('temp', $varB->get());
+                $varB = $varC;
+            }
+
                 if ($varB instanceof DateTimeIntervalVarHandler) {
                     $result = $this->compareInterval($operator, $varB);
                     $anonymousName = $this->registerAnonymous(new BoolVarHandler('temp', $result, null, $this->storage));

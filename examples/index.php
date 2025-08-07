@@ -103,9 +103,9 @@ $rand_customer = rand(0,count($customers_list) -1);
 
     echo "<p> <b>Dynamic expression : </b> <br /> \n ";
 
-    $expr = "Order.CreateTime = Order.CreateTime + '1 year';";
-
-    //$expr = "Order.Allow = !(Order.Customer.Country in prohibited_countries); Order.CreateTime = '2025-05-17 23:12:01' + '15 minute' ; Result.AllowPay = Order.Allow; Result.HaveDiscount = (Order.Totalwithoutdiscount > 5000 && Order.Goods.Producer_country in producer_countries_with_discounts); Result.IsApple = Order.Goods.Producer_name like '%apple%'";
+   // $expr = "ResultVar = (Order.CreateTime.Hour > 15 && Order.CreateTime.Hour < 21) ";
+    //$expr = "ResultVar = Order.CreateTime.dayname; ";
+    $expr = "Order.Allow = !(Order.Customer.Country in prohibited_countries); Order.CreateTime = '2025-05-17 23:12:01' + '15 minute' ; Result.AllowPay = Order.Allow; Result.HaveDiscount = (Order.Totalwithoutdiscount > 5000 && Order.Goods.Producer_country in producer_countries_with_discounts); Result.IsApple = Order.Goods.Producer_name like '%apple%'";
 
     //$expr = "ResultVar = 'new_value123'; ResultVar = ResultVar + '456'; Order.Deny = (Order.Customer.Country in prohibited_countries); Result.HaveDiscount = (Order.Totalwithoutdiscount > 5000 && Order.Goods.Producer_country in producer_countries_with_discounts); Result.IsApple = Order.Goods.Producer_name like '%apple%';";
 

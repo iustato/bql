@@ -2,6 +2,7 @@
 
 namespace iustato\Bql\VarTypes;
 
+use iustato\Bql\VariableStorage;
 use ReflectionClass;
 
 class ObjectHandler extends AbstractVariableHandler
@@ -9,8 +10,9 @@ class ObjectHandler extends AbstractVariableHandler
     private ?object $object;
     //private string $addressing = '';
 
-    public function __construct(string $name, object $object, $parent = null)
+    public function __construct(string $name, object $object, $parent = null, ?VariableStorage $storage = null)
     {
+        parent::__construct((string)$name, $var, $parent, $storage);
         $this->name = $name;
         $this->object = $object;
         $this->parent = $parent;

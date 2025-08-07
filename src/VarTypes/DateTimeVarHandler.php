@@ -36,67 +36,132 @@ class DateTimeVarHandler extends AbstractVariableHandler
     public function &get(string $key = '')
     {
         if (empty($key)) {
-            return $this->datetime;
+            $str = $this->datetime->format('Y-m-d H:i:s');
+            return $str;
         }
 
         // Поддерживаем различные форматы ключей для получения компонентов даты
         $key = strtolower($key);
-        
+
         switch ($key) {
             case 'year':
                 $value = (int)$this->datetime->format('Y');
+                $varN = new NumVarHandler('temp', $value, null, $this->storage);
+                $anonymousName = $this->registerAnonymous($varN);
+                $varN->name = $anonymousName;
+
                 break;
             case 'month':
                 $value = (int)$this->datetime->format('m');
+                $varN = new NumVarHandler('temp', $value, null, $this->storage);
+                $anonymousName = $this->registerAnonymous($varN);
+                $varN->name = $anonymousName;
+
                 break;
             case 'day':
                 $value = (int)$this->datetime->format('d');
+
+                $varN = new NumVarHandler('temp', $value, null, $this->storage);
+                $anonymousName = $this->registerAnonymous($varN);
+                $varN->name = $anonymousName;
+
                 break;
             case 'hour':
                 $value = (int)$this->datetime->format('H');
+                $varN = new NumVarHandler('temp', $value, null, $this->storage);
+                $anonymousName = $this->registerAnonymous($varN);
+                $varN->name = $anonymousName;
+
                 break;
             case 'minute':
                 $value = (int)$this->datetime->format('i');
+                $varN = new NumVarHandler('temp', $value, null, $this->storage);
+                $anonymousName = $this->registerAnonymous($varN);
+                $varN->name = $anonymousName;
+
                 break;
             case 'second':
                 $value = (int)$this->datetime->format('s');
+                $varN = new NumVarHandler('temp', $value, null, $this->storage);
+                $anonymousName = $this->registerAnonymous($varN);
+                $varN->name = $anonymousName;
+
                 break;
             case 'timestamp':
                 $value = $this->datetime->getTimestamp();
+                $varN = new NumVarHandler('temp', $value, null, $this->storage);
+                $anonymousName = $this->registerAnonymous($varN);
+                $varN->name = $anonymousName;
+
                 break;
             case 'weekday':
                 $value = (int)$this->datetime->format('w'); // 0 (Sunday) to 6 (Saturday)
+                $varN = new StringVarHandler('temp', $value, null, $this->storage);
+                $anonymousName = $this->registerAnonymous($varN);
+                $varN->name = $anonymousName;
+
                 break;
             case 'dayofyear':
                 $value = (int)$this->datetime->format('z'); // 0 to 365
+                $varN = new NumVarHandler('temp', $value, null, $this->storage);
+                $anonymousName = $this->registerAnonymous($varN);
+                $varN->name = $anonymousName;
+
                 break;
             case 'weekofyear':
                 $value = (int)$this->datetime->format('W'); // ISO-8601 week number
+                $varN = new NumVarHandler('temp', $value, null, $this->storage);
+                $anonymousName = $this->registerAnonymous($varN);
+                $varN->name = $anonymousName;
+
                 break;
             case 'quarter':
                 $month = (int)$this->datetime->format('m');
                 $value = (int)ceil($month / 3);
+                $varN = new NumVarHandler('temp', $value, null, $this->storage);
+                $anonymousName = $this->registerAnonymous($varN);
+                $varN->name = $anonymousName;
+
                 break;
             case 'dayname':
                 $value = $this->datetime->format('l'); // Full textual representation of the day of the week
+                $varN = new StringVarHandler('temp', $value, null, $this->storage);
+                $anonymousName = $this->registerAnonymous($varN);
+                $varN->name = $anonymousName;
+
                 break;
             case 'monthname':
                 $value = $this->datetime->format('F'); // Full textual representation of a month
+                $varN = new StringVarHandler('temp', $value, null, $this->storage);
+                $anonymousName = $this->registerAnonymous($varN);
+                $varN->name = $anonymousName;
+
                 break;
             case 'iso':
                 $value = $this->datetime->format('c'); // ISO 8601 date
+                $varN = new StringVarHandler('temp', $value, null, $this->storage);
+                $anonymousName = $this->registerAnonymous($varN);
+                $varN->name = $anonymousName;
+
                 break;
             case 'date':
                 $value = $this->datetime->format('Y-m-d'); // Date only
+                $varN = new StringVarHandler('temp', $value, null, $this->storage);
+                $anonymousName = $this->registerAnonymous($varN);
+                $varN->name = $anonymousName;
                 break;
             case 'time':
                 $value = $this->datetime->format('H:i:s'); // Time only
-                break;
+                $varN = new StringVarHandler('temp', $value, null, $this->storage);
+                $anonymousName = $this->registerAnonymous($varN);
+                $varN->name = $anonymousName;
+
+                return $varN;
             default:
                 $null = null;
                 return $null;
         }
-        
+
         return $value;
     }
 
@@ -204,8 +269,9 @@ class DateTimeVarHandler extends AbstractVariableHandler
                 // Добавление интервала к дате
                 $newDate = clone $this->datetime;
                 $newDate->add($varB->get());
-                $anonymousName = $this->registerAnonymous(new DateTimeVarHandler('temp', $newDate, null, $this->storage));
-                return new DateTimeVarHandler($anonymousName, $newDate, null, $this->storage);
+                $varN = new DateTimeVarHandler('temp', $newDate, null, $this->storage);
+                $anonymousName = $this->registerAnonymous($varN);
+                return $varN;
 
             } elseif ($varB instanceof NumVarHandler) {
                 // Добавление дней к дате (для обратной совместимости)
@@ -218,6 +284,12 @@ class DateTimeVarHandler extends AbstractVariableHandler
             break;
             
         case '-':
+            if ($varB instanceof StringVarHandler)
+            {
+                $varC = new DateTimeIntervalVarHandler('temp', $varB->get());
+                $varB = $varC;
+            }
+
             if ($varB instanceof DateTimeIntervalVarHandler) {
                 // Вычитание интервала из даты
                 $newDate = clone $this->datetime;
