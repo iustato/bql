@@ -72,7 +72,10 @@ class VariableStorage {
         if (is_array($this->usedVariables))
         {
             foreach ($this->usedVariables  as $key) {
-                $resp_arr[$key] = $this->variables[$key]->get();
+                if (isset($this->variables[$key]))
+                {
+                    $resp_arr[$key] = $this->variables[$key]->get();
+                }
             }
         }
         return $this->usedVariables;
