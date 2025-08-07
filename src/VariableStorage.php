@@ -60,7 +60,7 @@ class VariableStorage {
     }
 
     public function markUsed(string $name, $value): void {
-        $this->usedVariables[$name] = $value;
+        $this->usedVariables[] = $name;
     }
 
     public function getModifiedVariables(): array {
@@ -68,6 +68,13 @@ class VariableStorage {
     }
 
     public function getUsedVariables(): array {
+        $resp_arr = [];
+        if (is_array($this->usedVariables))
+        {
+            foreach ($this->usedVariables  as $key) {
+                $resp_arr[$key] = $this->variables[$key]->get();
+            }
+        }
         return $this->usedVariables;
     }
 

@@ -76,4 +76,7 @@ var_dump(  $results['isEmail']);
 $interpreter->evaluate("results.isNormalName = (data.name != 'John Doe')");
 var_dump(  $results['isNormalName']);
 
+var_dump($interpreter->getUsedVariables());;
+
+
 
