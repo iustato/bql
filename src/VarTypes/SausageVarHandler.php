@@ -68,7 +68,7 @@ class SausageVarHandler extends AbstractVariableHandler
         $currentHandler = $this->storage->getVariable($this->rootVariableName);
         
         if (!$currentHandler) {
-            return null;
+            return $this->storage->getVariable('null');
         }
 
         // Проходим по всем ключам, кроме первого (корневого)
@@ -76,7 +76,7 @@ class SausageVarHandler extends AbstractVariableHandler
             $currentKey = $this->keys[$i];
             
             if (!$currentHandler || !$currentHandler->has($currentKey)) {
-                return null;
+                return $this->storage->getVariable('null');
             }
 
             $currentValue = &$currentHandler->get($currentKey);
@@ -109,7 +109,7 @@ class SausageVarHandler extends AbstractVariableHandler
     }
 
     public function &get(string $key = '') {
-        $null = null;
+        $null = $this->storage->getVariable('null');
         $handler = $this->resolvePath();
         
         if (!$handler) {
@@ -200,7 +200,7 @@ class SausageVarHandler extends AbstractVariableHandler
 
     public function operatorCall(string $operator, ?AbstractVariableHandler $varB): ?AbstractVariableHandler {
         $handler = $this->resolvePath();
-        
+
         if (!$handler) {
             return null;
         }

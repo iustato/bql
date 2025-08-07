@@ -3,6 +3,7 @@
 namespace iustato\Bql\VarTypes;
 
 use iustato\Bql\VariableStorage;
+use MongoDB\BSON\PackedArray;
 
 class SimpleVarHandler extends AbstractVariableHandler
 {
@@ -57,6 +58,16 @@ class SimpleVarHandler extends AbstractVariableHandler
         {
             case '=':
                 return $varB;
+            case '??':
+                if (is_null($this->var))
+                {
+                    return $varB;
+                }
+                else
+                {
+                    return $this->var;
+                }
+
             default:
                 throw new \Exception("incorrect operator ".$operator." for ".__CLASS__);
         }

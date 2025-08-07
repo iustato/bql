@@ -46,6 +46,12 @@ class NumVarHandler extends SimpleVarHandler
                 $value = $this->var / $bValue;
                 $anonymousName = $this->registerAnonymous(new NumVarHandler('temp', $value, null, $this->storage));
                 return new NumVarHandler($anonymousName, $value, null, $this->storage);
+            case '+=':
+                $this->var += (float)$varB->get();
+                return $this;
+            case '-=':
+                $this->var -= (float)$varB->get();
+                return $this;
             case '==':
                 $value = $this->var == (float)$varB->get();
                 $anonymousName = $this->registerAnonymous(new BoolVarHandler('temp', $value, null, $this->storage));
@@ -85,6 +91,13 @@ class NumVarHandler extends SimpleVarHandler
     {
         switch ($operator)
         {
+            case '++':
+                $this->var = $this->var + 1;
+                return $this;
+            case '--':
+                $this->var = $this->var - 1;
+                return $this;
+
             default:
                 throw new \Exception("incorrect unary operator ".$operator." for ".__CLASS__);
         }
