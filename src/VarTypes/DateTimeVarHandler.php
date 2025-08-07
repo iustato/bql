@@ -30,8 +30,37 @@ class DateTimeVarHandler extends AbstractVariableHandler
     public static function supports($variable): bool
     {
         return $variable instanceof DateTime || 
-               (is_string($variable) && strtotime($variable) !== false);
+               (is_string($variable) && DateTimeVarHandler::isValidDate($variable));
     }
+
+    private static function isValidDate(string $date): bool {
+        $formats = [
+            'Y-m-d',
+            'd.m.Y',
+            'd-m-Y',
+            'Y/m/d',
+            'm/d/Y',
+            'Y-m-d H:i:s',
+            'd.m.Y H:i:s',
+            'Y-m-d\TH:i:s', // ISO 8601
+        ];
+
+        foreach ($formats as $format) {
+            $dt = DateTime::createFromFormat($format, $date);
+            $errors = DateTime::getLastErrors();
+            if (
+                $dt &&
+                $errors['warning_count'] === 0 &&
+                $errors['error_count'] === 0 &&
+                $dt->format($format) === $date
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
 
     public function &get(string $key = '')
     {
