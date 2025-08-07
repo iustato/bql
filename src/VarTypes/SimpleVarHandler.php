@@ -67,6 +67,17 @@ class SimpleVarHandler extends AbstractVariableHandler
                 {
                     return $this->var;
                 }
+            case 'in':
+                if ($varB instanceof ArrayHandler)
+                {
+                    $value = in_array($varB->get(), $this->var);
+                }
+                else
+                {
+                    $value = false;
+                }
+                $anonymousName = $this->registerAnonymous(new BoolVarHandler('temp', $value, null, $this->storage));
+                return new BoolVarHandler($anonymousName, $value, null, $this->storage);
 
             default:
                 throw new \Exception("incorrect operator ".$operator." for ".__CLASS__);
