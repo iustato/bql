@@ -70,7 +70,7 @@ class SimpleVarHandler extends AbstractVariableHandler
             case 'in':
                 if ($varB instanceof ArrayHandler)
                 {
-                    $value = in_array($varB->get(), $this->var);
+                    $value = in_array($this->var, $varB->get());
                 }
                 else
                 {
