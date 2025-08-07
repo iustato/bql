@@ -137,8 +137,8 @@ $rand_customer = rand(0,count($customers_list) -1);
 
     var_dump($current_order);
 
-    echo "<p> GetModifiedVariables :";
-    var_dump($bql->variableStorage->getModifiedVariables());
+    echo "<p> GetUsedVariables :";
+    var_dump($bql->variableStorage->getUsedVariables());
     echo "</p>";
 
     //var_dump($rez);

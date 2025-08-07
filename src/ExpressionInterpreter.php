@@ -491,7 +491,7 @@ class ExpressionInterpreter
             );
         }
 
-        // Отмечаем использование переменной
+        // Отмечаем использование переменной с её значением
         if ($token->getType() == 'identifier' || $token->getType() == 'sausage') {
             $this->variableStorage->markUsed($token->getValue(), $varHandler->get());
         }
