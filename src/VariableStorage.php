@@ -78,7 +78,7 @@ class VariableStorage {
                 }
             }
         }
-        return $this->usedVariables;
+        return $resp_arr;
     }
 
     public function getAllVariables(): array {
