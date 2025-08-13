@@ -117,14 +117,14 @@ class SimpleVarHandler extends AbstractVariableHandler
         }
     }
 
-    public function toString()
+    public function toString(): ?StringVarHandler
     {
         return new StringVarHandler('temp', $this->var, null, $this->storage);
     }
 
-    public function toNum()
+    public function toNum(): ?NumVarHandler
     {
-        // TODO: Implement toNum() method.
+        return new NumVarHandler('temp', $this->var, null, $this->storage);
     }
 
     public function convertToMe(AbstractVariableHandler $var)

@@ -345,9 +345,16 @@ class DateTimeIntervalVarHandler extends AbstractVariableHandler
         throw new \Exception("No unary operators supported for " . __CLASS__);
     }
 
-    public function toString()
+    public function toString(): ?StringVarHandler
     {
-        return $this->toReadableString();
+        $value = $this->toReadableString();
+        return new StringVarHandler('temp', $value, null, $this->storage);
+    }
+
+    public function toNum(): ?NumVarHandler
+    {
+        $value = $this->totalSeconds;
+        return new NumVarHandler('temp', $value, null, $this->storage);
     }
 
     private function toReadableString(): string
@@ -380,10 +387,7 @@ class DateTimeIntervalVarHandler extends AbstractVariableHandler
         return implode(', ', $parts);
     }
 
-    public function toNum()
-    {
-        return $this->totalSeconds;
-    }
+
 
     public function convertToMe(AbstractVariableHandler $var)
     {

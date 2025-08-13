@@ -367,14 +367,16 @@ class DateTimeVarHandler extends AbstractVariableHandler
         throw new \Exception("No unary operators supported for " . __CLASS__);
     }
 
-    public function toString()
+    public function toString(): ?StringVarHandler
     {
-        return $this->datetime->format('Y-m-d H:i:s');
+        $value = $this->datetime->format('Y-m-d H:i:s');
+        return new StringVarHandler('temp', $value, null, $this->storage);
     }
 
-    public function toNum()
+    public function toNum(): ?NumVarHandler
     {
-        return $this->datetime->getTimestamp();
+        $value = $this->datetime->getTimestamp();
+        return new NumVarHandler('temp', $value, null, $this->storage);
     }
 
     public function convertToMe(AbstractVariableHandler $var)

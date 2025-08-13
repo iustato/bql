@@ -135,14 +135,14 @@ class ObjectHandler extends AbstractVariableHandler
                 throw new \Exception("incorrect unary operator ".$operator." for ".__CLASS__);
         }
     }
-    public function toString()
+    public function toString(): ?StringVarHandler
     {
-        // TODO: Implement toString() method.
+        return new StringVarHandler('temp', $this->get(), null, $this->storage);
     }
 
-    public function toNum()
+    public function toNum(): ?NumVarHandler
     {
-        // TODO: Implement toNum() method.
+        return new NumVarHandler('temp', $this->get(), null, $this->storage);
     }
 
     public function convertToMe(AbstractVariableHandler $var)

@@ -93,12 +93,6 @@ class NumVarHandler extends SimpleVarHandler
         }
     }
 
-    public function toString(): StringVarHandler
-    {
-        $value = (string)$this->var;
-        return new StringVarHandler('temp', $value, null, $this->storage);
-    }
-
     public function operatorUnaryCall(string $operator): ?AbstractVariableHandler
     {
         switch ($operator)
@@ -115,6 +109,11 @@ class NumVarHandler extends SimpleVarHandler
         }
     }
 
+    public function toString(): StringVarHandler
+    {
+        $value = (string)$this->var;
+        return new StringVarHandler('temp', $value, null, $this->storage);
+    }
     public function toNum(): NumVarHandler
     {
         return $this;

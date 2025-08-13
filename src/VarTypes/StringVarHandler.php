@@ -85,9 +85,9 @@ class StringVarHandler extends SimpleVarHandler
                 throw new \Exception("incorrect unary operator ".$operator." for ".__CLASS__);
         }
     }
-    public function toString()
+    public function toString(): ?StringVarHandler
     {
-        return $this->var;
+        return $this;
     }
 
     public function toNum(): NumVarHandler

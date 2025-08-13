@@ -51,9 +51,9 @@ abstract class AbstractVariableHandler
      */
     abstract public function operatorUnaryCall(string $operator): ?AbstractVariableHandler;
 
-    abstract public function toString();
+    abstract public function toString() : ?StringVarHandler;
 
-    abstract public function toNum();
+    abstract public function toNum() : ?NumVarHandler;
 
     abstract public function convertToMe (AbstractVariableHandler $var);
 

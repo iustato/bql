@@ -86,6 +86,6 @@ $interpreter->evaluate("results.testrez = data.age in [ '25', '61', '42.00']");
 var_dump($interpreter->getUsedVariables());;
 
 
-$interpreter->evaluate("results.testconcat = 'a' . '23.15'");
+$interpreter->evaluate("results.testconcat = 'a' . data.age.toString() . 'b'");
 
 var_dump($interpreter->getUsedVariables());;

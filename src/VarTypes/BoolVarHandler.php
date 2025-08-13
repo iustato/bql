@@ -99,7 +99,7 @@ class BoolVarHandler extends SimpleVarHandler
         return $this->var;
     }
 
-    public function toString(): StringVarHandler
+    public function toString(): ?StringVarHandler
     {
         if ($this->var == true)
         {
@@ -113,7 +113,7 @@ class BoolVarHandler extends SimpleVarHandler
         }
     }
 
-    public function toNum(): NumVarHandler
+    public function toNum(): ?NumVarHandler
     {
         if ($this->var == true)
         {
