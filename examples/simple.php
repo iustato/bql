@@ -82,11 +82,11 @@ var_dump(  $results['isNormalName']);
 var_dump($interpreter->getUsedVariables());;
 
 
-$interpreter->evaluate("results.testrez = data.age in [ '25', '61', '42.00']");
+$interpreter->evaluate("results.testrez = data.age.toNum() . 'hzhz' "); //in [ '25', '61', '42.00']
 
 var_dump($interpreter->getUsedVariables());;
 
-
+/*
 $interpreter->evaluate("results.testconcat = 'a' . data.age.toString() . 'b'");
 
-var_dump($interpreter->getUsedVariables());;
+var_dump($interpreter->getUsedVariables());;*/
