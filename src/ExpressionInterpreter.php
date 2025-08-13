@@ -33,6 +33,7 @@ class ExpressionInterpreter
         $this->registerOperator('like', 3);
 
         $this->registerOperator('+', 3, 'left', false, 2);
+        $this->registerOperator('.', 3, 'left', false, 2);
         $this->registerOperator('-', 3, 'left', false, 2);
         $this->registerOperator('*', 4, 'left', false, 2);
         $this->registerOperator('/', 4, 'left', false, 2);
