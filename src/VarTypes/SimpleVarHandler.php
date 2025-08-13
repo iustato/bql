@@ -78,7 +78,16 @@ class SimpleVarHandler extends AbstractVariableHandler
                 }
                 $anonymousName = $this->registerAnonymous(new BoolVarHandler('temp', $value, null, $this->storage));
                 return new BoolVarHandler($anonymousName, $value, null, $this->storage);
-
+            case '+=':
+                $this->var += $varB->get();
+                return $this;
+            case '-=':
+                $this->var -= $varB->get();
+                return $this;
+            case '==':
+                $value = $this->var == $varB->get();
+                $anonymousName = $this->registerAnonymous(new BoolVarHandler('temp', $value, null, $this->storage));
+                return new BoolVarHandler($anonymousName, $value, null, $this->storage);
             default:
                 throw new \Exception("incorrect operator ".$operator." for ".__CLASS__);
         }

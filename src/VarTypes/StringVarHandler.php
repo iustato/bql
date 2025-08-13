@@ -32,7 +32,7 @@ class StringVarHandler extends SimpleVarHandler
         {
             case '=':
                 return $varB;
-            case '+':
+            case '.':
                 $value = $this->var . $varB->get();
                 $anonymousName = $this->registerAnonymous(new StringVarHandler('temp', $value, null, $this->storage));
                 return new StringVarHandler($anonymousName, $value, null, $this->storage);
@@ -56,6 +56,16 @@ class StringVarHandler extends SimpleVarHandler
                 $value = in_array($this->var, $varB->get());
                 $anonymousName = $this->registerAnonymous(new BoolVarHandler('temp', $value, null, $this->storage));
                 return new BoolVarHandler($anonymousName, $value, null, $this->storage);
+            case '+':
+            case '+=':
+            case '-':
+            case '-=':
+            case '*':
+            case '/':
+                // Приводим строку к числу и выполняем математическую операцию
+                $numHandler = $this->toNum();
+                return $numHandler->operatorCall($operator, $varB);
+
             default:
                 throw new \Exception("incorrect operator ".$operator." for ".__CLASS__);
         }
@@ -65,6 +75,12 @@ class StringVarHandler extends SimpleVarHandler
     {
         switch ($operator)
         {
+            case '++':
+            case '--':
+                // Приводим строку к числу и выполняем унарную операцию
+                $numHandler = $this->toNum();
+                return $numHandler->operatorUnaryCall($operator);
+
             default:
                 throw new \Exception("incorrect unary operator ".$operator." for ".__CLASS__);
         }

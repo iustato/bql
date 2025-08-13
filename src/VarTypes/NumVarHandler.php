@@ -18,7 +18,7 @@ class NumVarHandler extends SimpleVarHandler
 
     public static function supports($variable): bool
     {
-        return is_numeric($variable);
+        return (is_int($variable) || is_float($variable));
     }
 
     public function operatorCall(string $operator, ?AbstractVariableHandler $varB): ?AbstractVariableHandler
