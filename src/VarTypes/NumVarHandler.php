@@ -84,6 +84,10 @@ class NumVarHandler extends SimpleVarHandler
                 $value = in_array($this->var, $varB->get());
                 $anonymousName = $this->registerAnonymous(new BoolVarHandler('temp', $value, null, $this->storage));
                 return new BoolVarHandler($anonymousName, $value, null, $this->storage);
+            case '.':
+                $strHandler = $this->toString();
+                return $strHandler->operatorCall($operator, $varB);
+
             default:
                 throw new \Exception("incorrect operator ".$operator." for ".__CLASS__);
         }
