@@ -241,7 +241,8 @@ class SausageVarHandler extends AbstractVariableHandler
     public function toString() : ?StringVarHandler {
         $handler = $this->resolvePath();
         $value = $handler ? $handler->toString() : '';
-        return new StringVarHandler('temp', $value, null, $this->storage);
+        return $value;
+            //new StringVarHandler('temp', $value, null, $this->storage);
     }
 
     public function toNum() : ?NumVarHandler{

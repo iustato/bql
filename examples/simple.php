@@ -49,6 +49,7 @@ $interpreter->setVariables([
     'results' => &$results,
 ]);
 
+
 $interpreter->evaluate(
     "results.isAllowedCountry = (data.country in ['USA', 'MDA', 'CAD'])"
 );

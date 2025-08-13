@@ -452,35 +452,54 @@ class ExpressionInterpreter
             if (preg_match('/^(.+)\.(toString|toNum)\(\)$/', $methodCall, $matches)) {
                 $variableName = $matches[1];
                 $methodName = $matches[2];
-                
+
+                // Определяем тип токена для переменной
+                $variableTokenType = (strpos($variableName, '.') !== false) ? 'sausage' : 'identifier';
+
+                // Получаем обработчик переменной через рекурсивный вызов
+                $variableHandler = $this->resolveValue(new Token($variableTokenType, $variableName));
+
+
+                //VariableHandlerFactory::createHandler($variableName,$variableName,null,$this->variableStorage);
+                if ($variableHandler) {
+                    if ($methodName === 'toString') {
+                        $result = $variableHandler->toString();
+                        return $result;
+                    } elseif ($methodName === 'toNum') {
+                        $result = $variableHandler->toNum();
+                        return $result;
+                    }
+                }
+
+
                 // Получаем базовый обработчик переменной
                 $baseHandler = null;
                 if (strpos($variableName, '.') !== false) {
                     // Вложенная переменная
                     $baseHandler = VarTypes\SausageVarHandler::createForNestedVariable(
-                        $variableName, 
+                        $variableName,
                         $this->variableStorage
                     );
                 } else {
                     // Обычная переменная
                     $baseHandler = $this->variableStorage->getVariable($variableName);
                 }
-                
+
                 if ($baseHandler) {
                     // Отмечаем использование переменной
                     $this->variableStorage->markUsed($variableName, $baseHandler->get());
-                    
+
                     // Вызываем соответствующий метод и возвращаем результат
                     if ($methodName === 'toString') {
-                        $result = $baseHandler->toString()->get();
+                        $result = $baseHandler->toString();
                         return $result;
                     } elseif ($methodName === 'toNum') {
-                        $result = $baseHandler->toNum()->get();
+                        $result = $baseHandler->toNum();
                         return $result;
                     }
                 }
             }
-            
+
             // Возвращаем null-обработчик если метод не найден
             $null =$this->variableStorage->getVariable('null');
             return $null;
@@ -488,27 +507,27 @@ class ExpressionInterpreter
 
         // Обработка других типов токенов
         $varHandler = null;
-        
+
         if ($token->getType() == 'sausage') {
             $varHandler = VarTypes\SausageVarHandler::createForNestedVariable(
-                $token->getValue(), 
+                $token->getValue(),
                 $this->variableStorage
             );
-            
+
             if (!$varHandler) {
                 $null =$this->variableStorage->getVariable('null');
                 return $null;
             }
         } elseif ($token->getType() == 'identifier') {
             $varHandler = $this->variableStorage->getVariable($token->getValue());
-            
+
             if (!$varHandler) {
                 $null =$this->variableStorage->getVariable('null');
                 return $null;
             }
         } else {
             $varHandler = VariableHandlerFactory::createHandlerByTokenValue(
-                $token, 
+                $token,
                 $token->getValue(),
                 $token->getValue(),
                 null,
