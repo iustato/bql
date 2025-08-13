@@ -100,7 +100,9 @@ class SimpleVarHandler extends AbstractVariableHandler
                 // Приводим строку к числу и выполняем математическую операцию
                 $numHandler = $this->toNum();
                 return $numHandler->operatorCall($operator, $varB);
-
+            case '.':
+                $strHandler = $this->toString();
+                return $strHandler->operatorCall($operator, $varB);
             default:
                 throw new \Exception("incorrect operator ".$operator." for ".__CLASS__);
         }
@@ -117,7 +119,7 @@ class SimpleVarHandler extends AbstractVariableHandler
 
     public function toString()
     {
-        // TODO: Implement toString() method.
+        return new StringVarHandler('temp', $this->var, null, $this->storage);
     }
 
     public function toNum()
