@@ -2,76 +2,60 @@
 
 namespace iustato\Bql;
 
-use iustato\Bql\VarTypes\SimpleVarHandler;
 use InvalidArgumentException;
 use LogicException;
 use iustato\Bql\VarTypes\AbstractVariableHandler;
 
 class ExpressionInterpreter
 {
-    /* @var AbstractVariableHandler[] $variables */
-    private array $variables = [];
-    private $operators = [];
-
-    private $modifiedVariables = [];
-
-    private $usedVariables = [];
+    public VariableStorage $variableStorage;
+    private array $operators = [];
 
     public function __construct()
     {
-        // Регистрация операторов
-        $this->registerOperator('=', function (&$a, $b) {
-            $a = $b;
-            return $a;
-        }, 1, 'left', true, 2);
-        $this->registerOperator('&&', fn(&$a, $b) => $a && $b, 3, 'right');
-        $this->registerOperator('AND', fn(&$a, $b) => $a && $b, 3, 'right');
-        $this->registerOperator('||', fn(&$a, $b) => $a || $b, 2);
-        $this->registerOperator('OR', fn(&$a, $b) => $a || $b, 2);
-        $this->registerOperator('!', fn(&$a) => !$a, 4, 'right', false, 1);
-        $this->registerOperator('<', fn(&$a, $b) => $a < $b, 3);
-        $this->registerOperator('>', fn(&$a, $b) => $a > $b, 3);
-        $this->registerOperator('<=', fn(&$a, $b) => $a <= $b, 3);
-        $this->registerOperator('>=', fn(&$a, $b) => $a >= $b, 3);
-        $this->registerOperator('==', fn(&$a, $b) => trim((string)($a ?? '')) === trim((string)($b ?? '')), 3);
-        $this->registerOperator('!=', fn(&$a, $b) => $a != $b, 3);
-        $this->registerOperator('??', function(&$a, $b)
-        {
-            if (is_null($a)) return $b;
-            else return $a;
-        } , 3);
-        $this->registerOperator('in', function (&$a, $b) {
-            if (!is_array($b)) {
-                throw new InvalidArgumentException("Right-hand side of 'in' must be an array");
-            }
-            return in_array($a, $b);
-        }, 3);
-        $this->registerOperator('like', function (&$a, $b) {
-            $pattern = '/^' . str_replace(['%', '_'], ['.*', '.'], preg_quote($b, '/')) . '$/i';
-            return preg_match($pattern, $a) === 1;
-        }, 3);
+        $this->variableStorage = new VariableStorage();
 
-        $this->registerOperator('+', fn(&$a, $b) => $a + $b, 3, 'left', false, 2);
-        $this->registerOperator('-', fn(&$a, $b) => $a - $b, 3, 'left', false, 2);
-        $this->registerOperator('*', fn(&$a, $b) => $a * $b, 4, 'left', false, 2);
-        $this->registerOperator('/', fn(&$a, $b) => $b == 0 ? throw new InvalidArgumentException("Division by zero") : $a / $b, 4, 'left', false, 2);
-        $this->registerOperator('++', fn(&$a) => ++$a, 5, 'right', true, 1);
-        $this->registerOperator('--', fn(&$a) => --$a, 5, 'right', true, 1);
-        $this->registerOperator('+=', fn(&$a, $b) => $a += $b, 3, 'left', true, 2);
-        $this->registerOperator('-=', fn(&$a, $b) => $a -= $b, 3, 'left', true, 2);
+        // Регистрация операторов
+        $this->registerOperator('=', 1, 'left', true, 2);
+        $this->registerOperator('&&', 3, 'right');
+        $this->registerOperator('AND', 3, 'right');
+        $this->registerOperator('||', 2);
+        $this->registerOperator('OR', 2);
+        $this->registerOperator('!', 4, 'right', false, 1);
+        $this->registerOperator('<', 3);
+        $this->registerOperator('>', 3);
+        $this->registerOperator('<=', 3);
+        $this->registerOperator('>=', 3);
+        $this->registerOperator('==', 3);
+        $this->registerOperator('!=', 3);
+        $this->registerOperator('??', 3);
+        $this->registerOperator('in', 3);
+        $this->registerOperator('like', 3);
+
+        $this->registerOperator('+', 3, 'left', false, 2);
+        $this->registerOperator('.', 3, 'left', false, 2);
+        $this->registerOperator('-', 3, 'left', false, 2);
+        $this->registerOperator('*', 4, 'left', false, 2);
+        $this->registerOperator('/', 4, 'left', false, 2);
+        $this->registerOperator('++', 5, 'right', true, 1);
+        $this->registerOperator('--', 5, 'right', true, 1);
+        $this->registerOperator('+=', 3, 'left', true, 2);
+        $this->registerOperator('-=', 3, 'left', true, 2);
 
         // default variables:
+        /*
         $true = true; $false = false; $null = null;
         $this->variables['true'] = new SimpleVarHandler('true', $true);
         $this->variables['false'] = new SimpleVarHandler('false', $false);
         $this->variables['null'] = new SimpleVarHandler('null', $null);;
+        */
     }
 
-    public function registerOperator(string $operator, callable $callback, int $precedence, string $associativity = 'left', bool $modifiesVariable = false, int $operandCount = 2): void
+
+    public function registerOperator(string $operator, int $precedence, string $associativity = 'left', bool $modifiesVariable = false, int $operandCount = 2): void
     {
         $operator_lower = strtolower($operator);
         $this->operators[$operator_lower] = [
-            'callback' => $callback,
             'precedence' => $precedence,
             'associativity' => $associativity,
             'modifiesVariable' => $modifiesVariable,
@@ -79,44 +63,41 @@ class ExpressionInterpreter
         ];
     }
 
-    private function executeOperator(string $operator, Token &$a, Token &$b = null)
+
+    private function executeOperator(string $operator, Token &$a, Token &$b = null): ?AbstractVariableHandler
     {
         $operator_lower = strtolower($operator);
+
         if (!isset($this->operators[$operator_lower])) {
             throw new InvalidArgumentException("Operator '$operator_lower' is not defined.");
         }
 
         $operatorConfig = $this->operators[$operator_lower];
-
-        $token_value = $a->getValue();
         $var_a = $this->resolveValue($a);
 
-        $null = null;
-        if (isset($var_a)) {
-            $var_a_value = &$var_a->get();
-        } else {
-            $var_a_value = &$null;
+        // Обработка унарных операторов
+        if ($operatorConfig['operandCount'] === 1) {
+            $result = $var_a->operatorUnaryCall($operator);
+
+            /*
+            // Обработка операторов, изменяющих переменную (++, --)
+            if ($operatorConfig['modifiesVariable']) {
+                $this->handleVariableModification($a, $result);
+            }*/
+
+            return $result;
         }
 
-        if (isset($b)) {
-            $var_b = $this->resolveValue($b);
-            $var_b_value = $var_b->get();
-        } else {
-            $var_b = null;
-            $var_b_value = null;
-        }
+        // Обработка бинарных операторов
+        $var_b = $this->resolveValue($b);
+        $result = $var_a->operatorCall($operator, $var_b);
 
-        //     \log::log_message('debug', "call ".$operator_lower." callback_func: ".var_export($operatorConfig['callback'],true));
-        //$result = call_user_func($operatorConfig['callback'], $var_a_value, $var_b_value);
-        // ебучий call_user_func плюёт на передачу параметра по ссылке и передат копию значения
-        $result = ($operatorConfig['callback'])($var_a_value, $var_b_value);
+        /*
+        // Обработка операторов, изменяющих переменную (=, +=, -=)
         if ($operatorConfig['modifiesVariable']) {
-            $variable = $this->resolveValue($a);  //$this->variables[$token_value];
-            $variable->set( '', $result);
-
-            $this->modifiedVariables[$token_value] = $result;
+            $this->handleVariableModification($a, $result);
         }
-
+        */
         return $result;
     }
 
@@ -124,6 +105,7 @@ class ExpressionInterpreter
     {
         return array_keys($this->operators);
     }
+
 
     private function getPrecedence(string $operator): int
     {
@@ -133,33 +115,19 @@ class ExpressionInterpreter
 
     public function setVariables(array $variables): void
     {
-        foreach ($variables as $key => &$value) {
-            // получаем начальные значения переменных, объектов и т.д.
-            $this->variables[$key] = VariableHandlerFactory::createHandler($value, $key, null);
-        }
-
-        $this->modifiedVariables = [];
-    }
-
-    public function addVariable ($var_name, &$var_value)
-    {
-        $this->variables[$var_name] = &$var_value;
+        $this->variableStorage->setVariables($variables);
     }
 
     public function getModifiedVariables(): array
     {
-        return $this->modifiedVariables;
+        return $this->variableStorage->getModifiedVariables();
     }
 
     public function getUsedVariables(): array
     {
-        return $this->usedVariables;
+        return $this->variableStorage->getUsedVariables();
     }
 
-    public function getVariables(): array
-    {
-        return $this->variables;
-    }
 
     public function evaluate(string $expression): array
     {
@@ -188,7 +156,7 @@ class ExpressionInterpreter
     {
         $tokens = [];
         $length = strlen($expression);
-        $currentToken = null;
+        $currentToken = '';
         $state = 'default';
         $commands = [];
         $nestedLevel = 0; // Для отслеживания вложенности массивов
@@ -196,27 +164,33 @@ class ExpressionInterpreter
         for ($i = 0; $i < $length; $i++) {
             $char = $expression[$i];
 
+            // Обработка строк отдельно
             if ($state == 'string') {
-                $currentToken .= $char;
                 if ($char === "'") {
                     $tokens[] = new Token('string', $currentToken);
                     $currentToken = '';
                     $state = 'default';
+                } else {
+                    $currentToken .= $char;
                 }
                 continue;
-            } elseif ($char === ';') {
-                // Если символ это `;` и мы не в режиме строки, то заканчиваем текущую команду
+            }
 
+            // Обработка параметров методов отдельно
+            if ($state == 'method_params') {
+                $currentToken .= $char;
+                if ($char === ')') {
+                    $tokens[] = new Token('method_call', $currentToken);
+                    $currentToken = '';
+                    $state = 'default';
+                }
+                continue;
+            }
+
+            // Обработка конца команды
+            if ($char === ';') {
                 if ($currentToken !== '') {
-                    if ($state == 'identifier_or_operator') {
-                        if (in_array($currentToken, $this->getOperators())) {
-                            $state = 'operator';
-                        } else {
-                            $state = 'identifier';
-                        }
-                    }
-
-                    $tokens[] = new Token($state, $currentToken);
+                    $this->finalizeCurrentToken($tokens, $currentToken, $state);
                     $currentToken = '';
                     $state = 'default';
                 }
@@ -224,68 +198,71 @@ class ExpressionInterpreter
                 if (!empty($tokens)) {
                     $commands[] = $tokens;
                     $tokens = [];
-                    continue;
                 }
-            } elseif ($state != 'array' && (ctype_space($char) || $char == '(')) {
-                // если это пробел, то заканчиваем с токеном
-                if ($currentToken !== '') {
-                    if ($state == 'identifier_or_operator') {
-                        if (in_array(strtolower($currentToken), $this->getOperators())) {
-                            $currentToken = strtolower($currentToken);
-                            $state = 'operator';
-                        } else {
-                            $state = 'identifier';
-                        }
-                    }
+                continue;
+            }
 
-                    $tokens[] = new Token($state, $currentToken);
+            // Обработка пробелов (кроме состояния array)
+            if ($state != 'array' && ctype_space($char)) {
+                if ($currentToken !== '') {
+                    $this->finalizeCurrentToken($tokens, $currentToken, $state);
+                    $currentToken = '';
+                    $state = 'default';
+                }
+                continue;
+            }
+
+        // Обработка скобок (кроме состояния array)
+        if ($state != 'array' && ($char === '(' || $char === ')')) {
+            if ($currentToken !== '') {
+                // Специальная обработка для вызовов методов
+                if ($state == 'sausage' && $char === '(' && preg_match('/\.(toString|toNum)$/', $currentToken)) {
+                    $currentToken .= $char;
+                    $state = 'method_params';
+                    continue;
+                } else {
+                    $this->finalizeCurrentToken($tokens, $currentToken, $state);
                     $currentToken = '';
                     $state = 'default';
                 }
             }
-
+            // Добавляем скобку как отдельный токен parenthesis
+            $tokens[] = new Token('parenthesis', $char);
+            continue;
+        }
 
             switch ($state) {
                 case 'default':
-                    if (ctype_space($char)) {
-                        break; //continue;
-                    }
-                    if ($char === '(' || $char === ')') {
-                        $tokens[] = new Token('parenthesis', $char);
-                    } elseif (ctype_digit($char)) {
-                        $currentToken .= $char;
-                        $state = 'number';
-                    } elseif ($char === "'") {
-                        $currentToken .= $char;
+                    if ($char === "'") {
                         $state = 'string';
                     } elseif ($char === '[') {
-                        $currentToken .= $char;
+                        $currentToken = $char;
                         $state = 'array';
-                        $nestedLevel++;
-                    } elseif (!ctype_alnum($char) && $char != '_') {
-                        $currentToken .= $char;
+                        $nestedLevel = 1;
+                    } elseif (ctype_digit($char)) {
+                        $currentToken = $char;
+                        $state = 'number';
+                    } elseif (ctype_alpha($char) || $char === '_') {
+                        $currentToken = $char;
+                        $state = 'identifier';
+                    } elseif (!ctype_space($char)) {
+                        $currentToken = $char;
                         $state = 'operator';
-                    } else {
-                        $currentToken .= $char;
-                        $state = 'identifier_or_operator';
-                        //throw new InvalidArgumentException("Unexpected character: $char");
                     }
                     break;
+
                 case 'number':
-                    if (ctype_digit($char)) {
+                    if (ctype_digit($char) || $char === '.') {
                         $currentToken .= $char;
                     } else {
                         $tokens[] = new Token('number', $currentToken);
                         $currentToken = '';
                         $state = 'default';
-                        $i--;
+                        $i--; // Пересмотреть текущий символ
                     }
                     break;
-                case 'array':
-                    if (ctype_space($char)) {
-                        break;
-                    }
 
+                case 'array':
                     $currentToken .= $char;
                     if ($char === ']') {
                         $nestedLevel--;
@@ -298,58 +275,63 @@ class ExpressionInterpreter
                         $nestedLevel++;
                     }
                     break;
+
+                case 'identifier':
+                    if (ctype_alnum($char) || $char === '_') {
+                        $currentToken .= $char;
+                    } elseif ($char === '.') {
+                        $currentToken .= $char;
+                        $state = 'sausage';
+                    } else {
+                        $tokens[] = new Token('identifier', $currentToken);
+                        $currentToken = '';
+                        $state = 'default';
+                        $i--; // Пересмотреть текущий символ
+                    }
+                    break;
+
+                case 'sausage':
+                    if (ctype_alnum($char) || $char === '_' || $char === '.') {
+                        $currentToken .= $char;
+                    } else {
+                        // Проверяем, не является ли это вызовом метода
+                        if ($char === '(' && preg_match('/\.(toString|toNum)$/', $currentToken)) {
+                            $currentToken .= $char;
+                            $state = 'method_params';
+                        } else {
+                            $tokens[] = new Token('sausage', $currentToken);
+                            $currentToken = '';
+                            $state = 'default';
+                            $i--; // Пересмотреть текущий символ
+                        }
+                    }
+                    break;
+
                 case 'operator':
-                    if (!ctype_alnum($char)) {
+                    if (!ctype_alnum($char) && $char !== '_' && !ctype_space($char) && $char !== '(' && $char !== ')') {
                         $currentToken .= $char;
                     } else {
                         $tokens[] = new Token('operator', strtolower($currentToken));
                         $currentToken = '';
                         $state = 'default';
-                        $i--;
-                    }
-
-                    break;
-                case 'identifier':
-                    if (ctype_alnum($char) || in_array($char, ['_', '.'])) {
-                        $currentToken .= $char;
-                    } else {
-                        $tokens[] = new Token('identifier', $currentToken);
-                        $currentToken = '';
-                        $state = 'default';
-                        $i--;
+                        $i--; // Пересмотреть текущий символ
                     }
                     break;
-                case 'identifier_or_operator':
-                    if (ctype_alnum($char)) {
-                        $currentToken .= $char;
-                    } elseif (in_array($char, ['_', '.'])) {
-                        $currentToken .= $char;
-                        $state = 'identifier';
-                    } else {
-                        if (in_array(strtolower($currentToken), $this->getOperators())) {
-                            $tokens[] = new Token('operator', strtolower($currentToken));
-                        } else {
-                            $tokens[] = new Token('identifier', $currentToken);
-                        }
-                        $currentToken = '';
-                        $state = 'default';
-                        $i--;
-                    }
-                    break;
-            }
         }
-
-        if ($currentToken !== '') {
-            $tokens[] = new Token($state, $currentToken);
-        }
-
-        // Добавляем последнюю команду, если есть незавершённые токены
-        if (!empty($tokens)) {
-            $commands[] = $tokens;
-        }
-
-        return $commands;
     }
+
+    // Завершаем последний токен
+    if ($currentToken !== '') {
+        $this->finalizeCurrentToken($tokens, $currentToken, $state);
+    }
+
+    // Добавляем последнюю команду
+    if (!empty($tokens)) {
+        $commands[] = $tokens;
+    }
+
+    return $commands;
+}
 
 
     private function toReversePolishNotation(array $tokens): array
@@ -427,11 +409,16 @@ class ExpressionInterpreter
                 // Если оператор изменяет переменную, обновляем её значение
                 if ($this->operators[$operator]['modifiesVariable']) {
                     $variableName = $operands[0]->getValue();
-                    $this->variables[$variableName] = $result;
+                    $this->variableStorage->modifyVariable($variableName, $result);
+                    //$this->variables[$variableName] = $result;
                 }
 
                 // Добавляем результат обратно в стек
-                $stack[] = new Token('result', $result);
+                if (!empty($result))
+                {
+                    $stack[] = new Token('variable', $result);
+                }
+
             }
         }
 
@@ -452,43 +439,142 @@ class ExpressionInterpreter
     {
         $null = null;
 
-        if ($token->getType() == 'identifier') {
-            // Разделяем ключи на уровне по точке
-            $keys = explode('.', $token->getValue());
+        if ($token->getType() == 'variable') {
+            $varr = $token->getValue();
+            return $varr;
+        }
 
-            $varHandler = $this->variables[$keys[0]];
+        if ($token->getType() == 'method_call') {
+            // Обработка вызовов методов .toString() и .toNum()
+            $methodCall = $token->getValue();
+            
+            // Извлекаем переменную и метод
+            if (preg_match('/^(.+)\.(toString|toNum)\(\)$/', $methodCall, $matches)) {
+                $variableName = $matches[1];
+                $methodName = $matches[2];
 
-            // Перебираем вложенные ключи
-            for ($i = 1; $i < count($keys); $i++) {
-                $key = $keys[$i];
+                // Определяем тип токена для переменной
+                $variableTokenType = (strpos($variableName, '.') !== false) ? 'sausage' : 'identifier';
 
-                if (!empty($varHandler->has($key))) {
-                    $currentValue = &$varHandler->get($key);
-                    $varHandler = VariableHandlerFactory::createHandler($currentValue, $key, $varHandler);
+                // Получаем обработчик переменной через рекурсивный вызов
+                $variableHandler = $this->resolveValue(new Token($variableTokenType, $variableName));
+
+
+                //VariableHandlerFactory::createHandler($variableName,$variableName,null,$this->variableStorage);
+                if ($variableHandler) {
+                    if ($methodName === 'toString') {
+                        $result = $variableHandler->toString();
+                        return $result;
+                    } elseif ($methodName === 'toNum') {
+                        $result = $variableHandler->toNum();
+                        return $result;
+                    }
+                }
+
+
+                // Получаем базовый обработчик переменной
+                $baseHandler = null;
+                if (strpos($variableName, '.') !== false) {
+                    // Вложенная переменная
+                    $baseHandler = VarTypes\SausageVarHandler::createForNestedVariable(
+                        $variableName,
+                        $this->variableStorage
+                    );
                 } else {
-                    // TODO: warning: identifier not found
-                    return $null;
+                    // Обычная переменная
+                    $baseHandler = $this->variableStorage->getVariable($variableName);
+                }
+
+                if ($baseHandler) {
+                    // Отмечаем использование переменной
+                    $this->variableStorage->markUsed($variableName, $baseHandler->get());
+
+                    // Вызываем соответствующий метод и возвращаем результат
+                    if ($methodName === 'toString') {
+                        $result = $baseHandler->toString();
+                        return $result;
+                    } elseif ($methodName === 'toNum') {
+                        $result = $baseHandler->toNum();
+                        return $result;
+                    }
                 }
             }
+
+            // Возвращаем null-обработчик если метод не найден
+            $null =$this->variableStorage->getVariable('null');
+            return $null;
+        }
+
+        // Обработка других типов токенов
+        $varHandler = null;
+
+        if ($token->getType() == 'sausage') {
+            $varHandler = VarTypes\SausageVarHandler::createForNestedVariable(
+                $token->getValue(),
+                $this->variableStorage
+            );
+
+            if (!$varHandler) {
+                $null =$this->variableStorage->getVariable('null');
+                return $null;
+            }
+        } elseif ($token->getType() == 'identifier') {
+            $varHandler = $this->variableStorage->getVariable($token->getValue());
+
+            if (!$varHandler) {
+                $null =$this->variableStorage->getVariable('null');
+                return $null;
+            }
         } else {
-            $varHandler = VariableHandlerFactory::createHandlerByTokenValue($token, $token->getValue(), $token->getValue());
+            $varHandler = VariableHandlerFactory::createHandlerByTokenValue(
+                $token,
+                $token->getValue(),
+                $token->getValue(),
+                null,
+                $this->variableStorage
+            );
         }
 
-        if ($token->getType() == 'identifier' && $varHandler instanceof VarTypes\SimpleVarHandler) //&& !in_array($varHandler->getType(),['number', 'string'])
-        {
-            $this->usedVariables[$token->getValue()] = $varHandler->get();
+        if ($token->getType() == 'identifier' || $token->getType() == 'sausage') {
+            if ($varHandler) {
+                $this->variableStorage->markUsed($token->getValue(), $varHandler->get());
+            }
         }
 
-        if ( $varHandler instanceof AbstractVariableHandler)
-        {
-            return $varHandler;
-        }
-        else
-        {
-            $varHandler = VariableHandlerFactory::createHandlerByTokenValue($token, $token->getValue(), $token->getValue());
-            return $varHandler;
-        }
-
+        return $varHandler;
     }
 
+    public function tempSetVar()
+    {
+        $this->variableStorage->modifyVariable('Rez', 25);
+    }
+
+    private function finalizeCurrentToken(array &$tokens, string &$currentToken, string &$state): void
+    {
+        switch ($state) {
+            case 'identifier':
+                // Проверяем, не является ли идентификатор словесным оператором
+                $lowerToken = strtolower($currentToken);
+                if (isset($this->operators[$lowerToken])) {
+                    $tokens[] = new Token('operator', $lowerToken);
+                } else {
+                    $tokens[] = new Token('identifier', $currentToken);
+                }
+                break;
+            case 'number':
+                $tokens[] = new Token('number', $currentToken);
+                break;
+            case 'operator':
+                $tokens[] = new Token('operator', strtolower($currentToken));
+                break;
+            case 'sausage':
+                $tokens[] = new Token('sausage', $currentToken);
+                break;
+            default:
+                if ($currentToken !== '') {
+                    $tokens[] = new Token($state, $currentToken);
+                }
+                break;
+        }
+    }
 }

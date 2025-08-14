@@ -8,6 +8,7 @@ class Order
     public $Qnt;
     private $discount_sum;
 
+    public $CreateTime;
     private bool $allow_order = false;
 
     public function __construct(Customer $customer, Goods $goods, int $qnt)
@@ -15,6 +16,8 @@ class Order
         $this->Customer = $customer;
         $this->Goods = $goods;
         $this->Qnt = $qnt;
+        $this->CreateTime = date('Y-m-d H:i:s');
+        $this->discount_sum = 0;
     }
 
     public function setDiscount($value): void
@@ -42,5 +45,15 @@ class Order
     public function getAllow(): bool
     {
         return $this->allow_order;
+    }
+
+    public function setDeny(bool $value)
+    {
+        $this->allow_order = !$value;
+    }
+
+    public function getDeny(): bool
+    {
+        return !$this->allow_order;
     }
 }

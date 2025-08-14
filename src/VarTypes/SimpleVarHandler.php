@@ -2,16 +2,19 @@
 
 namespace iustato\Bql\VarTypes;
 
+use iustato\Bql\VariableStorage;
+use MongoDB\BSON\PackedArray;
+
 class SimpleVarHandler extends AbstractVariableHandler
 {
-    private $var;
+    protected $var;
 
-    public function __construct($name, &$var, $parent = null, $type = '')
+    public function __construct($name, &$var, $parent = null, ?VariableStorage $storage = null)
     {
-        $this->name = (string)$name;
-        $this->var = $var !== null ? trim($var, "'") : null;
-        $this->parent = $parent;
-        $this->type = $type;
+        parent::__construct((string)$name, $var, $parent, $storage);
+        $this->var = &$var;
+        $this->type = '';
+
     }
 
     public static function supports($variable): bool
@@ -27,7 +30,18 @@ class SimpleVarHandler extends AbstractVariableHandler
     public function set(string $key, &$value, bool $setCurrent = false): void
     {
         if ($this->parent == null || $setCurrent) {
-            $this->var = &$value;
+            if ($value instanceof AbstractVariableHandler) {
+                // получаем ссылку из нашей переменной
+                $var_ref = &$this->get();
+                // записываем значение ПО ссылке
+                $var_ref = $value->get($key);
+            } else {
+                // получаем ссылку из нашей переменной
+                $var_ref = &$this->get();
+
+                // записываем значение ПО ссылке
+                $var_ref = $value;
+            }
         } else {
             $this->parent->set($this->name, $value, true);
         }
@@ -36,5 +50,85 @@ class SimpleVarHandler extends AbstractVariableHandler
     public function has(string $key): string
     {
         return '';
+    }
+
+    public function operatorCall(string $operator, ?AbstractVariableHandler $varB): ?AbstractVariableHandler
+    {
+        switch ($operator)
+        {
+            case '=':
+                return $varB;
+            case '??':
+                if (is_null($this->var))
+                {
+                    return $varB;
+                }
+                else
+                {
+                    return $this->var;
+                }
+            case 'in':
+                if ($varB instanceof ArrayHandler)
+                {
+                    $value = in_array($this->var, $varB->get());
+                }
+                else
+                {
+                    $value = false;
+                }
+                $anonymousName = $this->registerAnonymous(new BoolVarHandler('temp', $value, null, $this->storage));
+                return new BoolVarHandler($anonymousName, $value, null, $this->storage);
+
+            case '==':
+                $value = $this->var == $varB->get();
+                $anonymousName = $this->registerAnonymous(new BoolVarHandler('temp', $value, null, $this->storage));
+                return new BoolVarHandler($anonymousName, $value, null, $this->storage);
+            case '!=':
+                $value = $this->var != $varB->get();
+                $anonymousName = $this->registerAnonymous(new BoolVarHandler('temp', $value, null, $this->storage));
+                return new BoolVarHandler($anonymousName, $value, null, $this->storage);
+            case '+':
+            case '+=':
+            case '-':
+            case '-=':
+            case '*':
+            case '/':
+            case '>':
+            case '>=':
+            case '<':
+            case '<=':
+                // Приводим строку к числу и выполняем математическую операцию
+                $numHandler = $this->toNum();
+                return $numHandler->operatorCall($operator, $varB);
+            case '.':
+                $strHandler = $this->toString();
+                return $strHandler->operatorCall($operator, $varB);
+            default:
+                throw new \Exception("incorrect operator ".$operator." for ".__CLASS__);
+        }
+    }
+
+    public function operatorUnaryCall(string $operator): ?AbstractVariableHandler
+    {
+        switch ($operator)
+        {
+            default:
+                throw new \Exception("incorrect unary operator ".$operator." for ".__CLASS__);
+        }
+    }
+
+    public function toString(): ?StringVarHandler
+    {
+        return new StringVarHandler('temp', $this->var, null, $this->storage);
+    }
+
+    public function toNum(): ?NumVarHandler
+    {
+        return new NumVarHandler('temp', $this->var, null, $this->storage);
+    }
+
+    public function convertToMe(AbstractVariableHandler $var)
+    {
+        // TODO: Implement convertToMe() method.
     }
 }

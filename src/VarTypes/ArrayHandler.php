@@ -2,16 +2,17 @@
 
 namespace iustato\Bql\VarTypes;
 
+use iustato\Bql\VariableStorage;
+
 class ArrayHandler extends AbstractVariableHandler
 {
     //  link to array
     private array $array;
 
-    public function __construct(string $name, array &$array, $parent = null)
+    public function __construct($name, array &$array, $parent = null, ?VariableStorage $storage = null)
     {
-        $this->name = $name;
+        parent::__construct((string)$name, $array, $parent, $storage);
         $this->array = &$array;
-        $this->parent = $parent;
         $this->type = 'array';
     }
 
@@ -37,7 +38,11 @@ class ArrayHandler extends AbstractVariableHandler
     public function set(string $key, &$value, bool $setCurrent = false): void
     {
         if ($this->parent == null || $setCurrent) {
-            $this->array[$key] = &$value;
+            if ($value instanceof AbstractVariableHandler) {
+                $this->array[$key] = $value->get();
+            } else {
+                $this->array[$key] = $value;
+            }
         } else {
             $this->parent->set($this->name, $value, true);
         }
@@ -49,5 +54,55 @@ class ArrayHandler extends AbstractVariableHandler
             return 'array';
         else
             return '';
+    }
+
+    public function operatorCall(string $operator, ?AbstractVariableHandler $varB): ?AbstractVariableHandler
+    {
+        switch (strtolower($operator))
+        {
+            case '=':
+                return $varB;
+            case 'in':
+                // Для оператора 'in' - проверяем, содержится ли значение в массиве
+                if ($varB === null) {
+                    throw new \InvalidArgumentException("Right-hand side of 'in' cannot be null");
+                }
+                $value = in_array($varB->get(), $this->array);
+                $anonymousName = $this->registerAnonymous(new BoolVarHandler('temp', $value, null, $this->storage));
+                return new BoolVarHandler($anonymousName, $value, null, $this->storage);
+            default:
+                throw new \Exception("incorrect operator ".$operator." for ".__CLASS__);
+        }
+    }
+
+    public function operatorUnaryCall(string $operator): ?AbstractVariableHandler
+    {
+        switch ($operator)
+        {
+            default:
+                throw new \Exception("incorrect unary operator ".$operator." for ".__CLASS__);
+        }
+    }
+    public function toString(): StringVarHandler
+    {
+        $value = json_encode($this->array);
+        return new StringVarHandler('temp', $value, null, $this->storage);
+    }
+
+    public function toNum(): NumVarHandler
+    {
+        $value = (float)count($this->array);
+        return new NumVarHandler('temp', $value, null, $this->storage);
+    }
+
+    public function convertToMe(AbstractVariableHandler $var): ArrayHandler
+    {
+        if ($var instanceof ArrayHandler) {
+            return $var;
+        }
+        
+        // Попытка конвертировать в массив
+        $value = [$var->get()];
+        return new ArrayHandler('temp', $value, null, $this->storage);
     }
 }

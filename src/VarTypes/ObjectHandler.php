@@ -2,6 +2,7 @@
 
 namespace iustato\Bql\VarTypes;
 
+use iustato\Bql\VariableStorage;
 use ReflectionClass;
 
 class ObjectHandler extends AbstractVariableHandler
@@ -9,8 +10,9 @@ class ObjectHandler extends AbstractVariableHandler
     private ?object $object;
     //private string $addressing = '';
 
-    public function __construct(string $name, object $object, $parent = null)
+    public function __construct(string $name, object $object, $parent = null, ?VariableStorage $storage = null)
     {
+        parent::__construct((string)$name, $var, $parent, $storage);
         $this->name = $name;
         $this->object = $object;
         $this->parent = $parent;
@@ -103,5 +105,48 @@ class ObjectHandler extends AbstractVariableHandler
         }
 
         return '';
+    }
+
+    public function operatorCall(string $operator, ?AbstractVariableHandler $varB): ?AbstractVariableHandler
+    {
+        switch ($operator)
+        {
+            case '=':
+                return $varB;
+            case '??':
+                if (is_null($this->object))
+                {
+                    return $varB;
+                }
+                else
+                {
+                    return $this->object;
+                }
+            default:
+                throw new \Exception("incorrect operator ".$operator." for ".__CLASS__);
+        }
+    }
+
+    public function operatorUnaryCall(string $operator): ?AbstractVariableHandler
+    {
+        switch ($operator)
+        {
+            default:
+                throw new \Exception("incorrect unary operator ".$operator." for ".__CLASS__);
+        }
+    }
+    public function toString(): ?StringVarHandler
+    {
+        return new StringVarHandler('temp', $this->get(), null, $this->storage);
+    }
+
+    public function toNum(): ?NumVarHandler
+    {
+        return new NumVarHandler('temp', $this->get(), null, $this->storage);
+    }
+
+    public function convertToMe(AbstractVariableHandler $var)
+    {
+        throw new \Exception("can not convert ".get_class($var)." to ".__CLASS__);
     }
 }
