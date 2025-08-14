@@ -1,5 +1,6 @@
 <?php
-namespace TestProj;
+namespace TestProj\Tests\Parts;
+
 class Order
 {
     public Customer $Customer;

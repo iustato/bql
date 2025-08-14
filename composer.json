@@ -16,5 +16,20 @@
     ],
     "require": {
         "ext-ctype": "*"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.0"
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "TestProj\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit tests",
+        "test-simple": "phpunit tests/SimpleTest.php",
+        "test-orders": "phpunit tests/OrderExpressionTest.php",
+        "test-math": "phpunit tests/MathOperationsTest.php",
+        "test-coverage": "phpunit --coverage-html coverage tests"
     }
 }

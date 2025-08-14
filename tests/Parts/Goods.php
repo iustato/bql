@@ -1,5 +1,5 @@
 <?php
-namespace TestProj;
+namespace TestProj\Tests\Parts;
 class Goods
 {
     public $Producer_name;
