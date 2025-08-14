@@ -17,6 +17,9 @@ class SimpleTest extends TestCase
             'name' => 'Ebun Hatab Abli Babah',
             'email' => 'ebunbabah@gmail.com',
             'age' => 42, // the answer
+            'phoneNumber' => '0123456789',
+            'zipCode' => '01234',
+            'accountId' => '0098765'
         ];
 
         $this->results = [
@@ -27,7 +30,11 @@ class SimpleTest extends TestCase
             'isNormalName' => false,
             'isUndefinedKey' => false,
             'testrez' => false,
-            'testconcat' => ''
+            'testconcat' => '',
+            'phoneMatch' => false,
+            'zipMatch' => false,
+            'phoneNotEqual' => false,
+            'zipNotEqual' => false
         ];
 
         $this->interpreter = new ExpressionInterpreter();
@@ -95,5 +102,33 @@ class SimpleTest extends TestCase
 
         $usedVars = $this->interpreter->getUsedVariables();
         $this->assertNotEmpty($usedVars);
+    }
+
+    /**
+     * Тест сравнения строк с ведущими нулями - важно убедиться,
+     * что они сравниваются как строки, а не как числа
+     */
+    public function testStringComparisonWithLeadingZeros(): void
+    {
+        // Проверяем точное совпадение строки с ведущими нулями
+        $this->interpreter->evaluate("results.phoneMatch = (data.phoneNumber.toString() == '0123456789')");
+        $this->assertTrue($this->results['phoneMatch'], 'Phone number with leading zero should match exactly as string');
+
+        $this->interpreter->evaluate("results.zipMatch = (data.zipCode == '01234')");
+        $this->assertTrue($this->results['zipMatch'], 'Zip code with leading zero should match exactly as string');
+
+    }
+
+    /**
+     * Тест конкатенации строк с ведущими нулями
+     */
+    public function testConcatenationWithLeadingZeros(): void
+    {
+        $this->interpreter->evaluate("results.testconcat = 'ID:' . data.accountId . '-END'");
+        $this->assertEquals('ID:0098765-END', $this->results['testconcat'], 'Concatenation should preserve leading zeros');
+
+        // Проверяем, что ведущие нули сохраняются при конкатенации
+        $this->interpreter->evaluate("results.zipConcat = data.zipCode . '-' . data.phoneNumber");
+        $this->assertEquals('01234-0123456789', $this->results['zipConcat'], 'Leading zeros should be preserved in concatenation');
     }
 }
