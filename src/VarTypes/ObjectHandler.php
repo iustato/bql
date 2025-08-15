@@ -81,26 +81,30 @@ class ObjectHandler extends AbstractVariableHandler
         }
 
         $reflection = new ReflectionClass($this->object);
+        
+        // Сначала проверяем через ReflectionClass (для объявленных в классе свойств)
         if ($reflection->hasProperty($key)) {
             $property = $reflection->getProperty($key);
             if ($property->isPublic()) {
-                //$this->addressing = 'property';
                 return 'property';
             }
+            // Если свойство не публичное, не возвращаем доступ к нему
+            return '';
         }
-        /*
-        if (property_exists($this->object, $key)) {
-            $this->addressing = 'property';
-            return true;
-        }*/
 
+        // Для stdClass объектов (созданных через (object)[]) проверяем динамические свойства
+        // stdClass не имеет private/protected свойств, все динамические свойства публичные
+        if ($reflection->getName() === 'stdClass' && property_exists($this->object, $key)) {
+            return 'property';
+        }
+
+        // Проверяем методы-геттеры
         if (method_exists($this->object, 'get' . ucfirst($key))) {
-            //$this->addressing = 'getter';
             return 'getter';
         }
 
+        // Проверяем магические методы
         if (method_exists($this->object, '__get')) {
-            //$this->addressing = 'magic';
             return 'magic';
         }
 
