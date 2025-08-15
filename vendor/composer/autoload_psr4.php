@@ -7,4 +7,7 @@ $baseDir = dirname($vendorDir);
 
 return array(
     'iustato\\Bql\\' => array($baseDir . '/src'),
+    'TestProj\\Tests\\' => array($baseDir . '/tests'),
+    'PhpParser\\' => array($vendorDir . '/nikic/php-parser/lib/PhpParser'),
+    'DeepCopy\\' => array($vendorDir . '/myclabs/deep-copy/src/DeepCopy'),
 );

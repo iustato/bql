@@ -29,7 +29,9 @@ require 'Customer.php';
 
 
 use iustato\Bql\ExpressionInterpreter;
-use iustato\Bql\VarTypes\StringVarHandler;
+use TestProj\Tests\parts\Customer;
+use TestProj\Tests\parts\Goods;
+use TestProj\Tests\parts\Order;
 
 /*
 $varA = 'aa';
