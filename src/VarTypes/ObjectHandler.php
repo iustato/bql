@@ -77,7 +77,7 @@ class ObjectHandler extends AbstractVariableHandler
     public function has(string $key): string
     {
         if (!empty($this->addressing)) {
-            return true;
+            return $this->addressing;
         }
 
         $reflection = new ReflectionClass($this->object);
@@ -88,7 +88,11 @@ class ObjectHandler extends AbstractVariableHandler
             if ($property->isPublic()) {
                 return 'property';
             }
-            // Если свойство не публичное, не возвращаем доступ к нему
+            // Если свойство не публичное, но есть магический метод __get
+            if (method_exists($this->object, '__get')) {
+                return 'magic';
+            }
+            // Если свойство не публичное, возвращаем пустую строку
             return '';
         }
 

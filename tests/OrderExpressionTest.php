@@ -77,17 +77,12 @@ class OrderExpressionTest extends TestCase
 
         $this->interpreter->evaluate("Result.AllowPay = !(Order.Customer.Country in prohibited_countries)");
 
-
-
         $this->assertFalse($this->results['AllowPay']);
 
-        $this->interpreter->evaluate("Result.rez = Order.Customer.Country");
-
+        $this->interpreter->evaluate("Result.rez = Order.Goods.Price");
         $usedVars = $this->interpreter->getUsedVariables();
 
-        //var_dump($usedVars);
-
-        $this->assertEquals('AFG', $usedVars['Result.rez']);;
+        $this->assertEquals(100, $usedVars['Result.rez']);;
 
     }
 }
