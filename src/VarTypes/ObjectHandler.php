@@ -8,13 +8,13 @@ use ReflectionClass;
 class ObjectHandler extends AbstractVariableHandler
 {
     private ?object $object;
-    //private string $addressing = '';
+    private array $addressingCache = []; // Кэш для результатов has() по ключам
 
-    public function __construct(string $name, object $object, $parent = null, ?VariableStorage $storage = null)
+    public function __construct(string $name, &$object, $parent = null, ?VariableStorage $storage = null)
     {
-        parent::__construct((string)$name, $var, $parent, $storage);
+        parent::__construct($name, $object, $parent, $storage);
         $this->name = $name;
-        $this->object = $object;
+        $this->object = &$object; // Используем ссылку
         $this->parent = $parent;
         $this->type = 'object';
     }
@@ -35,7 +35,7 @@ class ObjectHandler extends AbstractVariableHandler
         $addressing = $this->has($key);
 
         if (empty($addressing)) {
-                return $null;
+            return $null;
         }
 
         switch ($addressing) {
@@ -76,43 +76,47 @@ class ObjectHandler extends AbstractVariableHandler
 
     public function has(string $key): string
     {
-        if (!empty($this->addressing)) {
-            return $this->addressing;
+        // Проверяем кэш для этого ключа
+        if (isset($this->addressingCache[$key])) {
+            return $this->addressingCache[$key];
         }
 
+        $addressing = '';
         $reflection = new ReflectionClass($this->object);
         
         // Сначала проверяем через ReflectionClass (для объявленных в классе свойств)
         if ($reflection->hasProperty($key)) {
             $property = $reflection->getProperty($key);
             if ($property->isPublic()) {
-                return 'property';
+                $addressing = 'property';
+            } else {
+                // Если свойство не публичное, но есть магический метод __get/__set
+                if (method_exists($this->object, '__get') && method_exists($this->object, '__set')) {
+                    $addressing = 'magic';
+                } else {
+                    // Если свойство не публичное и нет магических методов, возвращаем пустую строку
+                    $addressing = '';
+                }
             }
-            // Если свойство не публичное, но есть магический метод __get
-            if (method_exists($this->object, '__get')) {
-                return 'magic';
-            }
-            // Если свойство не публичное, возвращаем пустую строку
-            return '';
         }
-
         // Для stdClass объектов (созданных через (object)[]) проверяем динамические свойства
         // stdClass не имеет private/protected свойств, все динамические свойства публичные
-        if ($reflection->getName() === 'stdClass' && property_exists($this->object, $key)) {
-            return 'property';
+        elseif ($reflection->getName() === 'stdClass' && property_exists($this->object, $key)) {
+            $addressing = 'property';
+        }
+        // Проверяем методы-геттеры/сеттеры
+        elseif (method_exists($this->object, 'get' . ucfirst($key))) {
+            $addressing = 'getter';
+        }
+        // Проверяем магические методы как последний вариант
+        elseif (method_exists($this->object, '__get') && method_exists($this->object, '__set')) {
+            $addressing = 'magic';
         }
 
-        // Проверяем методы-геттеры
-        if (method_exists($this->object, 'get' . ucfirst($key))) {
-            return 'getter';
-        }
-
-        // Проверяем магические методы
-        if (method_exists($this->object, '__get')) {
-            return 'magic';
-        }
-
-        return '';
+        // Кэшируем результат для этого ключа
+        $this->addressingCache[$key] = $addressing;
+        
+        return $addressing;
     }
 
     public function operatorCall(string $operator, ?AbstractVariableHandler $varB): ?AbstractVariableHandler
@@ -143,6 +147,7 @@ class ObjectHandler extends AbstractVariableHandler
                 throw new \Exception("incorrect unary operator ".$operator." for ".__CLASS__);
         }
     }
+    
     public function toString(): ?StringVarHandler
     {
         return new StringVarHandler('temp', $this->get(), null, $this->storage);

@@ -25,6 +25,7 @@ class OrderExpressionTest extends TestCase
             'AllowPay' => false,
             'HaveDiscount' => false,
             'IsApple' => false,
+            'NewAge' => false,
             'rez' => &$rez
         ];
 
@@ -53,6 +54,11 @@ class OrderExpressionTest extends TestCase
         );
 
         $this->assertFalse($this->results['HaveDiscount']); // 999.99 * 5 = 4999.95 < 5000
+
+        $this->interpreter->evaluate("Order.Goods.Price++;");
+        $usedVars = $this->interpreter->getUsedVariables();
+
+        $this->assertEquals(1000.99, $usedVars['Order.Goods.Price']);;
     }
 
     public function testAppleDetection(): void
@@ -78,11 +84,29 @@ class OrderExpressionTest extends TestCase
         $this->interpreter->evaluate("Result.AllowPay = !(Order.Customer.Country in prohibited_countries)");
 
         $this->assertFalse($this->results['AllowPay']);
+    }
 
-        $this->interpreter->evaluate("Result.rez = Order.Goods.Price");
+
+    public function testAddressingObjectsViaMagicMethods(): void
+    {
+        $iranCustomer = new Customer("Ahmad Khan", "AFG",27);
+        $iranOrder = new Order($iranCustomer, new Goods("Test", 100, "Test", "AFG"), 1);
+
+        $this->interpreter->setVariables([
+            'Order' => $iranOrder,
+            'Result' => &$this->results,
+            'prohibited_countries' => ['IRN', 'AFG']
+        ]);
+
+        $this->interpreter->evaluate("Result.rez = Order.Customer.Age");
         $usedVars = $this->interpreter->getUsedVariables();
 
-        $this->assertEquals(100, $usedVars['Result.rez']);;
+        $this->assertEquals(27, $usedVars['Result.rez']);;
 
+        $this->interpreter->evaluate("Order.Customer.Age++; Result.NewAge = Order.Customer.Age;");;
+        $usedVars = $this->interpreter->getUsedVariables();
+
+        $this->assertEquals(28, $usedVars['Order.Customer.Age']);;
+        $this->assertEquals(28, $usedVars['Result.NewAge']);;
     }
 }

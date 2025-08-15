@@ -109,10 +109,10 @@ class SausageVarHandler extends AbstractVariableHandler
     }
 
     public function &get(string $key = '') {
-        $null = $this->storage->getVariable('null');
         $handler = $this->resolvePath();
         
         if (!$handler) {
+            $null = null;
             return $null;
         }
 
@@ -138,6 +138,50 @@ class SausageVarHandler extends AbstractVariableHandler
             return;
         }
 
+        // Если у нас только один уровень вложенности (например, Order.Test), работаем напрямую
+        if (count($this->keys) === 2) {
+            $targetKey = $this->keys[1];
+            
+            if (empty($key) || $setCurrent) {
+                // Записываем значение напрямую в свойство корневого объекта
+                if (is_scalar($value) || is_null($value)) {
+                    $scalarValue = $value;
+                    $currentHandler->set($targetKey, $scalarValue);
+                } else {
+                    $currentHandler->set($targetKey, $value);
+                }
+            } else {
+                // Если указан дополнительный ключ, получаем целевой объект и записываем в него
+                $targetValue = &$currentHandler->get($targetKey);
+                $targetHandler = VariableHandlerFactory::createHandler(
+                    $targetValue,
+                    $targetKey,
+                    $currentHandler,
+                    $this->storage
+                );
+                
+                if ($targetHandler) {
+                    if (is_scalar($value) || is_null($value)) {
+                        $scalarValue = $value;
+                        $targetHandler->set($key, $scalarValue);
+                    } else {
+                        $targetHandler->set($key, $value);
+                    }
+                }
+            }
+            
+            // Сбрасываем кэш разрешенного обработчика
+            $this->resolvedHandler = null;
+            
+            // Отмечаем переменную как измененную через VariableStorage
+            if ($this->storage) {
+                $finalValue = is_scalar($value) ? $value : (($value instanceof AbstractVariableHandler) ? $value->get() : $value);
+                $this->storage->markModified($this->originalIdentifier, $finalValue);
+            }
+            return;
+        }
+
+        // Для многоуровневой вложенности (Order.Customer.Age)
         // Проходим до предпоследнего элемента
         for ($i = 1; $i < count($this->keys) - 1; $i++) {
             $currentKey = $this->keys[$i];
@@ -165,7 +209,8 @@ class SausageVarHandler extends AbstractVariableHandler
         $lastKey = end($this->keys);
         
         if ($setCurrent || empty($key)) {
-            $currentHandler->set($lastKey, $value);
+            // Записываем значение в конечное свойство
+            $currentHandler->set($lastKey, $value, true);
         } else {
             // Если указан дополнительный ключ
             $targetValue = &$currentHandler->get($lastKey);
@@ -177,17 +222,22 @@ class SausageVarHandler extends AbstractVariableHandler
             );
             
             if ($targetHandler) {
-                $targetHandler->set($key, $value);
+                if (is_scalar($value) || is_null($value)) {
+                    $scalarValue = $value;
+                    $targetHandler->set($key, $scalarValue);
+                } else {
+                    $targetHandler->set($key, $value);
+                }
             }
         }
         
         // Сбрасываем кэш разрешенного обработчика
         $this->resolvedHandler = null;
         
-        // Отмечаем корневую переменную как измененную через VariableStorage
+        // Отмечаем переменную как измененную через VariableStorage
         if ($this->storage) {
-            $actualValue = ($value instanceof AbstractVariableHandler) ? $value->get() : $value;
-            $this->storage->markModified($this->originalIdentifier, $actualValue);
+            $finalValue = is_scalar($value) ? $value : (($value instanceof AbstractVariableHandler) ? $value->get() : $value);
+            $this->storage->markModified($this->originalIdentifier, $finalValue);
         }
     }
 
@@ -215,10 +265,20 @@ class SausageVarHandler extends AbstractVariableHandler
         $result = $handler->operatorCall($operator, $varB);
         
         // Если оператор изменяет значение (например, =, +=, -=)
-        if (in_array($operator, ['=', '+=', '-=', '*=', '/=', '%='])) {
-            if ($result && $varB) {
-                $newValue = $varB->get();
+        if (in_array($operator, ['=', '+=', '-=', '*=', '/=', '%=']) && $result && $varB) {
+            $newValue = $result->get();
+            
+            // Для оператора = нужно записать новое значение по пути
+            if ($operator === '=') {
                 $this->set('', $newValue, true);
+            }
+            
+            // Сбрасываем кэш разрешенного обработчика  
+            $this->resolvedHandler = null;
+            
+            // Отмечаем как измененную
+            if ($this->storage) {
+                $this->storage->markModified($this->originalIdentifier, $newValue);
             }
         }
 
@@ -232,30 +292,44 @@ class SausageVarHandler extends AbstractVariableHandler
             return null;
         }
 
-        $result = $handler->operatorUnaryCall($operator);
-        
-        // Если оператор изменяет значение (например, ++, --)
+        // Для унарных операторов, изменяющих значение (++, --),
+        // нужно специально обработать запись обратно в объект
         if (in_array($operator, ['++', '--'])) {
+            // Выполняем операцию над конечным значением
+            $result = $handler->operatorUnaryCall($operator);
+            
             if ($result) {
                 $newValue = $result->get();
+                
+                // Записываем новое значение обратно по полному пути
+                // Важно: записываем именно в последний элемент пути
                 $this->set('', $newValue, true);
+                
+                // Сбрасываем кэш разрешенного обработчика
+                $this->resolvedHandler = null;
+                
+                // Отмечаем как измененную
+                if ($this->storage) {
+                    $this->storage->markModified($this->originalIdentifier, $newValue);
+                }
             }
+        
+            return $result;
         }
-
-        return $result;
+        
+        // Для других унарных операторов
+        return $handler->operatorUnaryCall($operator);
     }
+
 
     public function toString() : ?StringVarHandler {
         $handler = $this->resolvePath();
-        $value = $handler ? $handler->toString() : '';
-        return $value;
-            //new StringVarHandler('temp', $value, null, $this->storage);
+        return $handler ? $handler->toString() : null;
     }
 
     public function toNum() : ?NumVarHandler{
         $handler = $this->resolvePath();
-        $value =  $handler->toNum();
-        return $value;  //new NumVarHandler('temp', $value, null, $this->storage);
+        return $handler ? $handler->toNum() : null;
     }
 
     public function convertToMe(AbstractVariableHandler $var) {

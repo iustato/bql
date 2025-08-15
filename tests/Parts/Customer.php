@@ -5,10 +5,13 @@ class Customer
     private $Name;
     private $Country;
 
-    public function __construct($name, $country)
+    private $Age;
+
+    public function __construct($name, $country, $age = 32)
     {
         $this->Name = $name;
         $this->Country = $country;
+        $this->Age = $age;
     }
 
     public function __get(string $name)
