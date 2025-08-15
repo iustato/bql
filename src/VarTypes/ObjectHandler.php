@@ -66,6 +66,9 @@ class ObjectHandler extends AbstractVariableHandler
                     $method = 'set' . ucfirst($key);
                     if (method_exists($this->object, $method)) {
                         $this->object->{$method}($value);
+                    } else {
+                        // Если нет соответствующего сеттера, попробуем записать как свойство
+                        $this->object->{$key} = $value;
                     }
                     break;
             }
@@ -89,15 +92,12 @@ class ObjectHandler extends AbstractVariableHandler
             $property = $reflection->getProperty($key);
             if ($property->isPublic()) {
                 $addressing = 'property';
-            } else {
-                // Если свойство не публичное, но есть магический метод __get/__set
-                if (method_exists($this->object, '__get') && method_exists($this->object, '__set')) {
-                    $addressing = 'magic';
-                } else {
-                    // Если свойство не публичное и нет магических методов, возвращаем пустую строку
-                    $addressing = '';
-                }
             }
+        }
+
+        if (!empty($addressing))
+        {
+            // do nothing if public property already found
         }
         // Для stdClass объектов (созданных через (object)[]) проверяем динамические свойства
         // stdClass не имеет private/protected свойств, все динамические свойства публичные

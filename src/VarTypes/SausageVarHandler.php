@@ -268,10 +268,9 @@ class SausageVarHandler extends AbstractVariableHandler
         if (in_array($operator, ['=', '+=', '-=', '*=', '/=', '%=']) && $result && $varB) {
             $newValue = $result->get();
             
-            // Для оператора = нужно записать новое значение по пути
-            if ($operator === '=') {
-                $this->set('', $newValue, true);
-            }
+
+            $this->set('', $newValue, true);
+
             
             // Сбрасываем кэш разрешенного обработчика  
             $this->resolvedHandler = null;
@@ -301,9 +300,14 @@ class SausageVarHandler extends AbstractVariableHandler
             if ($result) {
                 $newValue = $result->get();
                 
+                // Отладочная информация
+                error_log("SausageVarHandler: operatorUnaryCall($operator) on {$this->originalIdentifier}");
+                error_log("Old value: " . var_export($handler->get(), true));
+                error_log("New value: " . var_export($newValue, true));
+                
                 // Записываем новое значение обратно по полному пути
                 // Важно: записываем именно в последний элемент пути
-                $this->set('', $newValue, true);
+                $this->writeValueToPath($newValue);
                 
                 // Сбрасываем кэш разрешенного обработчика
                 $this->resolvedHandler = null;
@@ -319,6 +323,54 @@ class SausageVarHandler extends AbstractVariableHandler
         
         // Для других унарных операторов
         return $handler->operatorUnaryCall($operator);
+    }
+
+    /**
+     * Записывает значение в конкретное место по пути
+     */
+    private function writeValueToPath($value): void {
+        // Получаем корневую переменную
+        $currentHandler = $this->storage->getVariable($this->rootVariableName);
+        
+        if (!$currentHandler) {
+            return;
+        }
+
+        error_log("writeValueToPath: writing $value to " . implode('.', $this->keys));
+
+        // Если у нас только 2 ключа (например, class.counter), записываем напрямую в корневой объект
+        if (count($this->keys) === 2) {
+            $targetKey = $this->keys[1];
+            error_log("writeValueToPath: writing to root object property $targetKey");
+            $currentHandler->set($targetKey, $value, true);
+            return;
+        }
+
+        // Для многоуровневой вложенности проходим до предпоследнего элемента
+        for ($i = 1; $i < count($this->keys) - 1; $i++) {
+            $currentKey = $this->keys[$i];
+            
+            if (!$currentHandler->has($currentKey)) {
+                return; // Путь не существует
+            }
+
+            $currentValue = &$currentHandler->get($currentKey);
+            $currentHandler = VariableHandlerFactory::createHandler(
+                $currentValue,
+                $currentKey,
+                $currentHandler,
+                $this->storage
+            );
+            
+            if (!$currentHandler) {
+                return;
+            }
+        }
+
+        // Записываем значение в последний элемент пути
+        $lastKey = $this->keys[count($this->keys) - 1];
+        error_log("writeValueToPath: writing to final property $lastKey");
+        $currentHandler->set($lastKey, $value, true);
     }
 
 

@@ -21,7 +21,20 @@ foreach ($autoloadPaths as $autoload) {
 if (!class_exists(\Composer\Autoload\ClassLoader::class)) {
     die("❌ Ошибка: Не найден autoload.php! Запустите `composer install` в корне проекта.\n");
 }
+class AccessViaMethods
+{
+    private int $counter = 0;
 
+    public function getCounter(): int
+    {
+        return $this->counter;
+    }
+
+    public function setCounter(int $counter): void
+    {
+        $this->counter = $counter;
+    }
+}
 
 use iustato\Bql\ExpressionInterpreter;
 use TestProj\Tests\Parts\Customer;
@@ -43,64 +56,30 @@ $testCustomer = new Customer("Test Customer", "USA", 25);
 $testGoods = new Goods("iPhone 14 Pro", 999.99, "Apple Inc", "USA");  // Цена 999.99
 $testOrder = new Order($testCustomer, $testGoods, 5); // Количество 5
 
-echo "<h2>Исходные данные:</h2>";
-echo "Товар: {$testGoods->Name}, Цена: {$testGoods->Price}<br>";
-echo "Количество: {$testOrder->Qnt}<br>";
-echo "Общая стоимость без скидки: " . $testOrder->getTotalwithoutdiscount() . "<br>";
+$class = new AccessViaMethods();
+$initial = 10;
+$class->setCounter($initial);
 
+$result = [];
 $bql->setVariables([
-    'Result' => &$ResultArr,
-    'Order' => $testOrder,
-    'producer_countries_with_discounts' => ['FIN', 'USA', 'GEO', 'ITA', 'DEU'],
-    'prohibited_countries' => ['IRN', 'AFG']
+    'class' => $class,
+    'result' => &$result
 ]);
 /*
-echo "<h2>Шаг 1: Проверка скидки</h2>";
+ *             class.counter++;
+            result.afterIncrement = class.counter;
+ */
+// Тестируем несколько операций подряд
+$bql->evaluate("
 
-// Первое выражение из теста
-$expr1 = "Result.HaveDiscount = (Order.Totalwithoutdiscount > 5000 && Order.Goods.Producer_country in producer_countries_with_discounts)";
-echo "Выражение: <code>{$expr1}</code><br>";
+            class.counter += 5; 
+            result.afterAdd = class.counter
+        ");
 
-try {
-    $bql->evaluate($expr1);
-    echo "Результат HaveDiscount: " . ($ResultArr['HaveDiscount'] ? 'true' : 'false') . "<br>";
-    echo "Общая стоимость: " . $testOrder->getTotalwithoutdiscount() . " (должна быть < 5000)<br>";
-} catch (Exception $e) {
-    echo "❌ Ошибка: " . $e->getMessage() . "<br>";
-}
-*/
-echo "<h2>Шаг 2: Инкремент цены (проблемная операция)</h2>";
+var_dump($result);
+//$this->assertEquals($initial + 1, $result['afterIncrement']);
+//$this->assertEquals($initial + 1 + 5, $result['afterAdd']);
 
-echo "Цена товара ДО инкремента: {$testGoods->Price}<br>";
 
-// Проблемная строка из теста
-$expr2 = "Order.Goods.Price++";
-echo "Выражение: <code>{$expr2}</code><br>";
 
-try {
-    $bql->evaluate($expr2);
-    
-    echo "✅ Инкремент выполнен успешно!<br>";
-    echo "Цена товара ПОСЛЕ инкремента: {$testGoods->Price}<br>";
-    
-    $usedVars = $bql->getUsedVariables();
-    echo "Использованные переменные:<br>";
-    foreach ($usedVars as $key => $value) {
-        echo "- {$key}: {$value}<br>";
-    }
-    
-} catch (TypeError $e) {
-    echo "❌ TypeError: " . $e->getMessage() . "<br>";
-    echo "Файл: " . $e->getFile() . ":" . $e->getLine() . "<br>";
-    
-    // Показываем стек вызовов
-    echo "<details><summary>Стек вызовов</summary><pre>" . $e->getTraceAsString() . "</pre></details>";
-    
-} catch (Exception $e) {
-    echo "❌ Другая ошибка: " . $e->getMessage() . "<br>";
-}
 
-echo "<h2>Состояние объектов после тестов:</h2>";
-
-echo "<h3>Результаты:</h3>";
-echo "<pre>";
