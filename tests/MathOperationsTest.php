@@ -41,6 +41,9 @@ class MathOperationsTest extends TestCase
     {
         $this->interpreter->evaluate("results.complex = (a + b) * c - a / b");
         $this->assertEquals(28, $this->results['complex']); // (10+5)*2 - 10/5 = 30 - 2 = 28
+
+        $this->interpreter->evaluate("results.complex2 = a*5/1000");
+        $this->assertEquals(0.05, $this->results['complex2']);
     }
 
     public function testComparisonOperators(): void
