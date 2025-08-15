@@ -116,6 +116,13 @@ class SausageVarHandler extends AbstractVariableHandler
             return $null;
         }
 
+        // Отмечаем переменную как использованную при чтении
+        if ($this->storage) {
+            $actualValue = $handler->get($key);
+            $actualValue = ($actualValue instanceof AbstractVariableHandler) ? $actualValue->get() : $actualValue;
+            $this->storage->markUsed($this->originalIdentifier, $actualValue);
+        }
+
         if (empty($key)) {
             return $handler->get();
         }
