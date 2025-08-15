@@ -112,6 +112,12 @@ class SimpleVarHandler extends AbstractVariableHandler
     {
         switch ($operator)
         {
+            case '++':
+                $this->var = $this->var + 1;
+                return $this;
+            case '--':
+                $this->var = $this->var - 1;
+                return $this;
             default:
                 throw new \Exception("incorrect unary operator ".$operator." for ".__CLASS__);
         }
