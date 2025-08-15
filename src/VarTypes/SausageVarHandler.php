@@ -263,7 +263,7 @@ class SausageVarHandler extends AbstractVariableHandler
         }
 
         $result = $handler->operatorCall($operator, $varB);
-        
+
         // Если оператор изменяет значение (например, =, +=, -=)
         if (in_array($operator, ['=', '+=', '-=', '*=', '/=', '%=']) && $result && $varB) {
             $newValue = $result->get();
@@ -300,11 +300,7 @@ class SausageVarHandler extends AbstractVariableHandler
             if ($result) {
                 $newValue = $result->get();
                 
-                // Отладочная информация
-                error_log("SausageVarHandler: operatorUnaryCall($operator) on {$this->originalIdentifier}");
-                error_log("Old value: " . var_export($handler->get(), true));
-                error_log("New value: " . var_export($newValue, true));
-                
+
                 // Записываем новое значение обратно по полному пути
                 // Важно: записываем именно в последний элемент пути
                 $this->writeValueToPath($newValue);
@@ -336,12 +332,9 @@ class SausageVarHandler extends AbstractVariableHandler
             return;
         }
 
-        error_log("writeValueToPath: writing $value to " . implode('.', $this->keys));
-
         // Если у нас только 2 ключа (например, class.counter), записываем напрямую в корневой объект
         if (count($this->keys) === 2) {
             $targetKey = $this->keys[1];
-            error_log("writeValueToPath: writing to root object property $targetKey");
             $currentHandler->set($targetKey, $value, true);
             return;
         }
@@ -369,7 +362,6 @@ class SausageVarHandler extends AbstractVariableHandler
 
         // Записываем значение в последний элемент пути
         $lastKey = $this->keys[count($this->keys) - 1];
-        error_log("writeValueToPath: writing to final property $lastKey");
         $currentHandler->set($lastKey, $value, true);
     }
 
