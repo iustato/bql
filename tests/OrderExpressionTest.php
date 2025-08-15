@@ -20,10 +20,12 @@ class OrderExpressionTest extends TestCase
         $goods = new Goods("iPhone 14 Pro", 999.99, "Apple Inc", "USA");
         $this->order = new Order($customer, $goods, 5);
 
+        $rez = '';
         $this->results = [
             'AllowPay' => false,
             'HaveDiscount' => false,
             'IsApple' => false,
+            'rez' => &$rez
         ];
 
         $this->interpreter = new ExpressionInterpreter();
@@ -76,5 +78,11 @@ class OrderExpressionTest extends TestCase
         $this->interpreter->evaluate("Result.AllowPay = !(Order.Customer.Country in prohibited_countries)");
 
         $this->assertFalse($this->results['AllowPay']);
+
+        $this->interpreter->evaluate("Result.rez = Order.Goods.Price");
+        $usedVars = $this->interpreter->getUsedVariables();
+
+        $this->assertEquals(100, $usedVars['Result.rez']);;
+
     }
 }
