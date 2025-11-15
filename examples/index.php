@@ -65,13 +65,11 @@ $bql->setVariables([
     'class' => $class,
     'result' => &$result
 ]);
-/*
- *             class.counter++;
-            result.afterIncrement = class.counter;
- */
+
 // Тестируем несколько операций подряд
 $bql->evaluate("
-
+            class.counter++;
+            result.afterIncrement = class.counter;
             class.counter += 5; 
             result.afterAdd = class.counter
         ");

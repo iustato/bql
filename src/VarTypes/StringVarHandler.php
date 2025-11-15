@@ -62,6 +62,10 @@ class StringVarHandler extends SimpleVarHandler
             case '-=':
             case '*':
             case '/':
+            case '>':
+            case '>=':
+            case '<':
+            case '<=':
                 // Приводим строку к числу и выполняем математическую операцию
                 $numHandler = $this->toNum();
                 return $numHandler->operatorCall($operator, $varB);
