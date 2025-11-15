@@ -111,7 +111,7 @@ class NumVarHandler extends SimpleVarHandler
 
     public function toString(): StringVarHandler
     {
-        $value = (string)$this->var;
+        $value = sprintf('%g', (string)$this->var);
         return new StringVarHandler('temp', $value, null, $this->storage);
     }
     public function toNum(): NumVarHandler
