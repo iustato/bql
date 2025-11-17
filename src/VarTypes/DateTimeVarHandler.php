@@ -50,8 +50,8 @@ class DateTimeVarHandler extends AbstractVariableHandler
             $errors = DateTime::getLastErrors();
             if (
                 $dt &&
-                $errors['warning_count'] === 0 &&
-                $errors['error_count'] === 0 &&
+                (!$errors || $errors['warning_count'] === 0 &&
+                $errors['error_count'] === 0 )&&
                 $dt->format($format) === $date
             ) {
                 return true;

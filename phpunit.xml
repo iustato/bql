@@ -8,4 +8,11 @@
             <directory>tests</directory>
         </testsuite>
     </testsuites>
+    
+    <!-- Настройки для покрытия кода (если нужно) -->
+    <source>
+        <include>
+            <directory suffix=".php">src</directory>
+        </include>
+    </source>
 </phpunit>
