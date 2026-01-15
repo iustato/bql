@@ -76,11 +76,12 @@ $expression = "
             result.afterIncrement = class.counter;
             class.counter += 5; 
             result.afterAdd = class.counter;
+            result.r1 = iif(class.counter < 10, 'yes', 'no');
+            result.r2  = max(2 * (5 + 4), 3, 28, 44, 99, 17); 
+            result.r3 = abs(0+8);
+";
 
-        ";
-
-$expression = "result.r1 = iif(class.counter < 10, 'yes', 'no'); result.r2  = max( 5, 3); result.r3 = abs(0+8);";
-$expression = "result.r2  = max( 2 * (5 + 4), 3, 28, 44, 99, 17);";
+//$expression = "result.r1 = iif(class.counter < 10, 'yes', 'no'); result.r2  = max(2 * (5 + 4), 3, 28, 44, 99, 17); result.r3 = abs(0+8);";
 //$expression = "result.businessHours = (dateTime.Hour >= 9 && dateTime.Hour < 17)";
 
 $bql->evaluate($expression);
