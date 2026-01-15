@@ -87,6 +87,14 @@ class NumVarHandler extends SimpleVarHandler
             case '.':
                 $strHandler = $this->toString();
                 return $strHandler->operatorCall($operator, $varB);
+            case '&&':
+            case 'and':
+                // Для числовых значений: 0 считается false, остальные - true
+                $thisValue = ($this->var != 0);
+                $otherValue = ($varB->get() != 0);
+                $value = $thisValue && $otherValue;
+                $anonymousName = $this->registerAnonymous(new BoolVarHandler('temp', $value, null, $this->storage));
+                return new BoolVarHandler($anonymousName, $value, null, $this->storage);
 
             default:
                 throw new \Exception("incorrect operator ".$operator." for ".__CLASS__);

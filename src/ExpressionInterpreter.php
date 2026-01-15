@@ -3,6 +3,8 @@
 namespace iustato\Bql;
 
 use InvalidArgumentException;
+use iustato\Bql\VarTypes\BoolVarHandler;
+use iustato\Bql\VarTypes\SimpleVarHandler;
 use LogicException;
 use iustato\Bql\VarTypes\AbstractVariableHandler;
 
@@ -10,6 +12,7 @@ class ExpressionInterpreter
 {
     public VariableStorage $variableStorage;
     private array $operators = [];
+    private array $functions = [];
 
     public function __construct()
     {
@@ -21,16 +24,16 @@ class ExpressionInterpreter
         $this->registerOperator('AND', 3, 'right');
         $this->registerOperator('||', 2);
         $this->registerOperator('OR', 2);
-        $this->registerOperator('!', 4, 'right', false, 1);
-        $this->registerOperator('<', 3);
-        $this->registerOperator('>', 3);
-        $this->registerOperator('<=', 3);
-        $this->registerOperator('>=', 3);
-        $this->registerOperator('==', 3);
-        $this->registerOperator('!=', 3);
+        $this->registerOperator('!', 5, 'right', false, 1);
+        $this->registerOperator('<', 4);
+        $this->registerOperator('>', 4);
+        $this->registerOperator('<=', 4);
+        $this->registerOperator('>=', 4);
+        $this->registerOperator('==', 4);
+        $this->registerOperator('!=', 4);
         $this->registerOperator('??', 3);
-        $this->registerOperator('in', 3);
-        $this->registerOperator('like', 3);
+        $this->registerOperator('in', 4);
+        $this->registerOperator('like', 4);
 
         $this->registerOperator('+', 3, 'left', false, 2);
         $this->registerOperator('.', 3, 'left', false, 2);
@@ -41,6 +44,10 @@ class ExpressionInterpreter
         $this->registerOperator('--', 5, 'right', true, 1);
         $this->registerOperator('+=', 3, 'left', true, 2);
         $this->registerOperator('-=', 3, 'left', true, 2);
+
+
+        // Регистрация встроенных функций
+        $this->registerBuiltinFunctions();
 
         // default variables:
         /*
@@ -61,6 +68,70 @@ class ExpressionInterpreter
             'modifiesVariable' => $modifiesVariable,
             'operandCount' => $operandCount,
         ];
+    }
+
+
+    /**
+     * Регистрирует новую функцию
+     */
+    public function registerFunction(string $name, callable $callback, int $minArgs = 0, int $maxArgs = PHP_INT_MAX, string $returnType = null): void
+    {
+        $func_name = strtolower($name);
+        $this->functions[$func_name] = [
+            'callback' => $callback,
+            'minArgs' => $minArgs,
+            'maxArgs' => $maxArgs,
+            'returnType' => $returnType
+        ];
+    }
+
+    /**
+     * Регистрирует встроенные функции
+     */
+    private function registerBuiltinFunctions(): void
+    {
+        // Функция iif (condition, true_result, false_result)
+        $this->registerFunction('iif', function ($condition, $trueResult, $falseResult) {
+            $conditionValue = $condition instanceof AbstractVariableHandler ? $condition->get() : $condition;
+            $conditionBool = filter_var($conditionValue, FILTER_VALIDATE_BOOLEAN);
+
+            if ($conditionBool) {
+                return $trueResult instanceof AbstractVariableHandler ? $trueResult->get() : $trueResult;
+            } else {
+                return $falseResult instanceof AbstractVariableHandler ? $falseResult->get() : $falseResult;
+            }
+        }, 3, 3);
+
+        // Функция max
+        $this->registerFunction('max', function (...$args) {
+            $values = array_map(function ($arg) {
+                return $arg instanceof AbstractVariableHandler ? $arg->get() : $arg;
+            }, $args);
+            return max($values);
+        }, 1);
+
+        // Функция min
+        $this->registerFunction('min', function (...$args) {
+            $values = array_map(function ($arg) {
+                return $arg instanceof AbstractVariableHandler ? $arg->get() : $arg;
+            }, $args);
+            return min($values);
+        }, 1);
+
+        // Функция abs
+        $this->registerFunction('abs', function ($value) {
+            $val = $value instanceof AbstractVariableHandler ? $value->get() : $value;
+            return abs($val);
+        }, 1, 1);
+
+        // Функция len (длина строки или массива)
+        $this->registerFunction('len', function ($value) {
+            $val = $value instanceof AbstractVariableHandler ? $value->get() : $value;
+            if (is_string($val) || is_array($val)) {
+                return count($val);
+            }
+            return 0;
+        }, 1, 1);
     }
 
 
@@ -152,7 +223,7 @@ class ExpressionInterpreter
     }
 
     /* @return Token[][] */
-    private function tokenizeWithAutomaton(string $expression): array
+    public function tokenizeWithAutomaton(string $expression): array
     {
         $tokens = [];
         $length = strlen($expression);
@@ -202,8 +273,8 @@ class ExpressionInterpreter
                 continue;
             }
 
-            // Обработка пробелов (кроме состояния array)
-            if ($state != 'array' && ctype_space($char)) {
+            // Обработка пробелов (кроме состояния array, function_call) т.к. для них скобки это часть процесса
+            if ( !in_array($state, ['array', 'function_call'])  && ctype_space($char)) {
                 if ($currentToken !== '') {
                     $this->finalizeCurrentToken($tokens, $currentToken, $state);
                     $currentToken = '';
@@ -212,23 +283,31 @@ class ExpressionInterpreter
                 continue;
             }
 
+
         // Обработка скобок (кроме состояния array)
-        if ($state != 'array' && ($char === '(' || $char === ')')) {
-            if ($currentToken !== '') {
-                // Специальная обработка для вызовов методов
-                if ($state == 'sausage' && $char === '(' && preg_match('/\.(toString|toNum)$/', $currentToken)) {
-                    $currentToken .= $char;
-                    $state = 'method_params';
-                    continue;
-                } else {
-                    $this->finalizeCurrentToken($tokens, $currentToken, $state);
-                    $currentToken = '';
-                    $state = 'default';
-                }
+        if (!in_array($state, ['array', 'function_call']) && ($char === '(' || $char === ')')) {
+            if ($state == 'identifier' && $char === '(') {
+                //$currentToken .= $char;
+                $state = 'function_call';
             }
-            // Добавляем скобку как отдельный токен parenthesis
-            $tokens[] = new Token('parenthesis', $char);
-            continue;
+            else
+            {
+                if ($currentToken !== '') {
+                    // Специальная обработка для вызовов методов
+                    if ($state == 'sausage' && $char === '(' && preg_match('/\.(toString|toNum)$/', $currentToken)) {
+                        $currentToken .= $char;
+                        $state = 'method_params';
+                        continue;
+                    } else {
+                        $this->finalizeCurrentToken($tokens, $currentToken, $state);
+                        $currentToken = '';
+                        $state = 'default';
+                    }
+                }
+                // Добавляем скобку как отдельный токен parenthesis
+                $tokens[] = new Token('parenthesis', $char);
+                continue;
+            }
         }
 
             switch ($state) {
@@ -276,6 +355,7 @@ class ExpressionInterpreter
                     }
                     break;
 
+                // В case 'identifier' добавить обработку функций:
                 case 'identifier':
                     if (ctype_alnum($char) || $char === '_') {
                         $currentToken .= $char;
@@ -317,6 +397,21 @@ class ExpressionInterpreter
                         $i--; // Пересмотреть текущий символ
                     }
                     break;
+
+                // Добавить новое состояние для обработки вызовов функций:
+                case 'function_call':
+                    $currentToken .= $char;
+                    if ($char === '(') {
+                        $nestedLevel++;
+                    } elseif ($char === ')') {
+                        $nestedLevel--;
+                        if ($nestedLevel <= 0) {
+                            $tokens[] = new FunctionCallToken( $currentToken);
+                            $currentToken = '';
+                            $state = 'default';
+                        }
+                    }
+                    break;
         }
     }
 
@@ -334,49 +429,64 @@ class ExpressionInterpreter
 }
 
 
-    private function toReversePolishNotation(array $tokens): array
-    {
-        $output = [];
-        $operators = [];
+public function toReversePolishNotation(array $tokens): array
+{
+    $output = [];
+    $operators = [];
 
-        foreach ($tokens as $token) {
-            /*  @var  Token $token */
-            if ($token->getType() !== 'operator' && $token->getType() !== 'parenthesis') {
-                $output[] = $token;
-            } elseif ($token->getValue() === '(') {
-                $operators[] = $token;
-            } elseif ($token->getValue() === ')') {
-                while (!empty($operators) && end($operators)->getValue() !== '(') {
-                    $output[] = array_pop($operators);
-                }
-                array_pop($operators); // Удалить '('
-            } else {
-                // Обработка операторов с учётом приоритета и ассоциативности
-                while (
-                    !empty($operators) &&
-                    end($operators)->getType() === 'operator' &&
-                    (
-                        $this->getPrecedence(end($operators)->getValue()) > $this->getPrecedence($token->getValue()) ||
-                        (
-                            $this->getPrecedence(end($operators)->getValue()) === $this->getPrecedence($token->getValue()) &&
-                            $this->operators[end($operators)->getValue()]['associativity'] === 'left'
-                        )
-                    )
-                ) {
-                    $output[] = array_pop($operators);
-                }
-                $operators[] = $token;
+    foreach ($tokens as $token) {
+        /*  @var  Token $token */
+        $tokenType = $token->getType();
+        $tokenValue = $token->getValue();
+
+        // Функции и другие не-операторы идут прямо в вывод
+        if ($tokenType !== 'operator' && $tokenType !== 'parenthesis') {
+            $output[] = $token;
+        } 
+        // Открывающая скобка (не функция)
+        elseif ($tokenValue === '(') {
+            $operators[] = $token;
+        } 
+        // Закрывающая скобка
+        elseif ($tokenValue === ')') {
+            // Выталкиваем операторы до открывающей скобки
+            while (!empty($operators) && end($operators)->getValue() !== '(') {
+                $output[] = array_pop($operators);
             }
+            // Удаляем открывающую скобку
+            if (!empty($operators)) {
+                array_pop($operators); 
+            }
+        } 
+        // Операторы
+        else {
+            // Обработка операторов с учётом приоритета и ассоциативности
+            while (
+                !empty($operators) &&
+                end($operators)->getType() === 'operator' &&
+                (
+                    $this->getPrecedence(end($operators)->getValue()) > $this->getPrecedence($tokenValue) ||
+                    (
+                        $this->getPrecedence(end($operators)->getValue()) === $this->getPrecedence($tokenValue) &&
+                        ($this->operators[strtolower($tokenValue)]['associativity'] ?? 'left') === 'left'
+                    )
+                )
+            ) {
+                $output[] = array_pop($operators);
+            }
+            $operators[] = $token;
         }
-
-        while (!empty($operators)) {
-            $output[] = array_pop($operators);
-        }
-
-        return $output;
     }
 
-    private function evaluateRPN(array $rpn)
+    // Выталкиваем оставшиеся операторы
+    while (!empty($operators)) {
+        $output[] = array_pop($operators);
+    }
+
+    return $output;
+}
+
+    public function evaluateRPN(array $rpn)
     {
         $stack = [];
 
@@ -429,13 +539,25 @@ class ExpressionInterpreter
         }*/
 
         if (count($stack) > 0) {
-            return array_pop($stack)->getValue();
+
+            $token_var = array_pop($stack);
+
+            if ($token_var instanceof Token && $token_var->getType() == 'sausage')
+            {
+                $var = $this->resolveValue($token_var);
+            }
+            else
+            {
+                $var = $token_var->getValue();
+            }
+
+            return $var;    //array_pop($stack)->getValue();
         } else {
             return null;
         }
     }
 
-    private function &resolveValue(Token $token): ?AbstractVariableHandler
+    public function &resolveValue(Token $token): ?AbstractVariableHandler
     {
         $null = null;
 
@@ -444,10 +566,18 @@ class ExpressionInterpreter
             return $varr;
         }
 
+
+        // Добавляем обработку function_call
+        if ($token->getType() == 'function_call') {
+
+                $result = $this->executeFunctionCallToken($token);
+            return $result;
+        }
+
         if ($token->getType() == 'method_call') {
             // Обработка вызовов методов .toString() и .toNum()
             $methodCall = $token->getValue();
-            
+
             // Извлекаем переменную и метод
             if (preg_match('/^(.+)\.(toString|toNum)\(\)$/', $methodCall, $matches)) {
                 $variableName = $matches[1];
@@ -557,6 +687,9 @@ class ExpressionInterpreter
                 $lowerToken = strtolower($currentToken);
                 if (isset($this->operators[$lowerToken])) {
                     $tokens[] = new Token('operator', $lowerToken);
+                } elseif (isset($this->functions[$lowerToken])) {
+                    // Проверяем, является ли идентификатор зарегистрированной функцией
+                    $tokens[] = new Token('function', $currentToken);
                 } else {
                     $tokens[] = new Token('identifier', $currentToken);
                 }
@@ -570,11 +703,99 @@ class ExpressionInterpreter
             case 'sausage':
                 $tokens[] = new Token('sausage', $currentToken);
                 break;
+            case 'function_call':
+                // Создаем FunctionCallToken, который сам парсит вызов
+                $tokens[] = new FunctionCallToken($currentToken);
+                break;
             default:
                 if ($currentToken !== '') {
                     $tokens[] = new Token($state, $currentToken);
                 }
                 break;
         }
+    }
+
+    /**
+     * Выполняет функцию
+     */
+    private function executeFunctionCallToken(FunctionCallToken $functionToken): ?AbstractVariableHandler
+    {
+        $functionName = $functionToken->getFunctionName();
+
+        if (!isset($this->functions[$functionName])) {
+            throw new \InvalidArgumentException("Function '$functionName' is not defined.");
+        }
+
+        $functionConfig = $this->functions[$functionName];
+
+        // Вычисляем параметры через метод токена
+        $args = $functionToken->evaluateParameters($this);
+
+        // Проверяем количество аргументов
+        $argCount = count($args);
+        if ($argCount < $functionConfig['minArgs'] || $argCount > $functionConfig['maxArgs']) {
+            throw new \InvalidArgumentException(
+                "Function '$functionName' expects {$functionConfig['minArgs']}-{$functionConfig['maxArgs']} arguments, got $argCount"
+            );
+        }
+
+        // Выполняем функцию
+        $result = call_user_func_array($functionConfig['callback'], $args);
+
+        if ($functionConfig['returnType'] == null)
+        {
+            // Создаем обработчик для результата
+            return VariableHandlerFactory::createHandler(
+                $result,
+                "function_result_$functionName",
+                null,
+                $this->variableStorage
+            );
+        }else
+        {
+            $type_name = 'iustato\\Bql\\VarTypes\\'.$functionConfig['returnType'];
+            /* @var AbstractVariableHandler $type_name */
+            $typeWorker = new $type_name("function_result_$functionName", $result, null, $this->variableStorage);
+
+            $this->variableStorage->addAnonymousVariableHandler($typeWorker);
+
+            return $typeWorker;
+        }
+    }
+
+    /**
+     * Создает токен из строки
+     */
+    private function createTokenFromString(string $str): Token
+    {
+        $str = trim($str);
+        
+        // Проверяем на пустую строку или только запятую
+        if ($str === '' || $str === ',') {
+            return new Token('identifier', 'null'); // Возвращаем null токен
+        }
+
+        // Число
+        if (is_numeric($str)) {
+            return new Token('number', $str);
+        }
+
+        // Строка в кавычках
+        if (preg_match("/^'([^']*)'$/", $str, $matches)) {
+            return new Token('string', $matches[1]);
+        }
+
+        // Массив
+        if (preg_match('/^\[.*\]$/', $str)) {
+            return new Token('array', $str);
+        }
+
+        // Вложенная переменная (sausage)
+        if (strpos($str, '.') !== false) {
+            return new Token('sausage', $str);
+        }
+
+        // Обычная переменная
+        return new Token('identifier', $str);
     }
 }

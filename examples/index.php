@@ -41,7 +41,7 @@ use TestProj\Tests\Parts\Customer;
 use TestProj\Tests\Parts\Goods;
 use TestProj\Tests\Parts\Order;
 
-echo "<h1>Тест воспроизведения проблемы из testOrderDiscountLogic</h1>";
+echo "<h1>BQL TESTS</h1>";
 
 $bql = new ExpressionInterpreter();
 
@@ -61,19 +61,30 @@ $initial = 10;
 $class->setCounter($initial);
 
 $result = [];
+$r = 0;
 $bql->setVariables([
     'class' => $class,
-    'result' => &$result
+    'dateTime' => '2025-05-17 15:30:00',
+    'result' => &$result,
+    'r' => $r
 ]);
 
 // Тестируем несколько операций подряд
-$bql->evaluate("
+
+$expression = "
             class.counter++;
             result.afterIncrement = class.counter;
             class.counter += 5; 
-            result.afterAdd = class.counter
-        ");
+            result.afterAdd = class.counter;
 
+        ";
+
+$expression = "result.r1 = iif(class.counter < 10, 'yes', 'no'); result.r2  = max( 5, 3); result.r3 = abs(0+8);";
+$expression = "result.r2  = max( 2 * (5 + 4), 3, 28, 44, 99, 17);";
+//$expression = "result.businessHours = (dateTime.Hour >= 9 && dateTime.Hour < 17)";
+
+$bql->evaluate($expression);
+//            result.funcRez = iif( 5 > 4, result.afterAdd, 0)
 var_dump($result);
 //$this->assertEquals($initial + 1, $result['afterIncrement']);
 //$this->assertEquals($initial + 1 + 5, $result['afterAdd']);
