@@ -277,7 +277,8 @@ class DateTimeVarHandler extends AbstractVariableHandler
                     $result = $this->compareDateTime($operator, $varB->datetime);
                 } else {
                     try {
-                        $otherDateTime = new DateTime($varB->toString());
+                        $stringVal = $varB->get();
+                        $otherDateTime = new DateTime($stringVal);
                         $result = $this->compareDateTime($operator, $otherDateTime);
                     } catch (\Exception $e) {
                         $result = false;
