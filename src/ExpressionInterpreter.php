@@ -64,7 +64,7 @@ class ExpressionInterpreter
     }
 
 
-    private function executeOperator(string $operator, Token &$a, Token &$b = null): ?AbstractVariableHandler
+    private function executeOperator(string $operator, Token &$a, ?Token &$b = null): ?AbstractVariableHandler
     {
         $operator_lower = strtolower($operator);
 
