@@ -130,11 +130,7 @@ class SimpleVarHandler extends AbstractVariableHandler
 
     public function toNum(): ?NumVarHandler
     {
-        // Дробное или слишком большое для int целое — decimal/bignum (bcmath),
-        // иначе обычное целое. Исключаем float и переполнение int.
-        if (DecimalVarHandler::needsDecimal($this->var)) {
-            return new DecimalVarHandler('temp', $this->var, null, $this->storage);
-        }
+        // Единый NumVarHandler сам выберет представление (int / строка bcmath).
         return new NumVarHandler('temp', $this->var, null, $this->storage);
     }
 

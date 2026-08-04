@@ -62,8 +62,10 @@ class DecimalTest extends TestCase
         $this->interpreter->evaluate("results.m = a + 0.5");
         $this->assertSame('10.5', $this->results['m']);
 
+        // Целый результат — настоящий int, даже если операнд был дробным:
+        // 2.5 * 4 = 10 (не '10').
         $this->interpreter->evaluate("results.mul = price * 4");
-        $this->assertSame('10', $this->results['mul']);
+        $this->assertSame(10, $this->results['mul']);
     }
 
     /** Сравнения выполняются через bccomp. */
@@ -77,6 +79,19 @@ class DecimalTest extends TestCase
 
         $this->interpreter->evaluate("results.le = (2.50 <= price)");
         $this->assertTrue($this->results['le']);
+    }
+
+    /**
+     * Арифметика не переполняется во float: результат, вылезающий за диапазон
+     * PHP int, отдаётся строкой с полной точностью (bcmath).
+     */
+    public function testNoIntegerOverflow(): void
+    {
+        $this->interpreter->evaluate("results.ovf = 9223372036854775807 + 1");
+        $this->assertSame('9223372036854775808', $this->results['ovf']);
+
+        $this->interpreter->evaluate("results.mul = 9999999999 * 9999999999");
+        $this->assertSame('99999999980000000001', $this->results['mul']);
     }
 
     /** Унарный инкремент десятичного числа. */

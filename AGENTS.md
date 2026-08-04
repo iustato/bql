@@ -74,8 +74,7 @@ php examples/index.php           # ручная песочница для быс
 
 | Handler | Для чего |
 |---|---|
-| `NumVarHandler` | ТОЛЬКО целые (int). Арифметика и сравнения целых. При смешении с decimal и при делении не нацело результат «поднимается» до decimal |
-| `DecimalVarHandler` | Числа «с точкой». Понятия float в интерпретаторе НЕТ: значение хранится строкой, все операции — через **bcmath** (`bcadd/bcsub/bcmul/bcdiv/bccomp`). Хост-float усыновляется как decimal |
+| `NumVarHandler` | ВСЕ числа (целые и дробные — единый тип). Понятия float НЕТ. Вся арифметика/сравнения — через **bcmath** (`bcadd/bcsub/bcmul/bcdiv/bccomp`), переполнения не бывает. `get()` отдаёт настоящий `int`, если результат целый и в диапазоне int, иначе — нормализованную строку (дробь или большое целое, напр. 20-значный номер). См. `present()`/`toNumericString()`/`normalize()` |
 | `StringVarHandler` | строки, `like`, конкатенация `.` |
 | `BoolVarHandler` | булевы |
 | `ArrayHandler` | массивы, оператор `in` |
