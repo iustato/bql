@@ -30,7 +30,7 @@
 
 **Простой пример**
 ```php
-use Iustato\Bql\ExpressionInterpreter;
+use iustato\Bql\ExpressionInterpreter;
 
 $bql = new ExpressionInterpreter();
 
