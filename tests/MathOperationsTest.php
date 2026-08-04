@@ -157,4 +157,36 @@ class MathOperationsTest extends TestCase
 
         $this->assertSame('3.5', $modified['price']);
     }
+
+    /**
+     * Сравнение длинного числового поля (напр. 13-значный taxNumber) со
+     * строковым литералом работает независимо от того, как поле хранится в
+     * хосте — как int или как string.
+     */
+    public function testLongNumberFieldComparison(): void
+    {
+        $this->interpreter->setVariables([
+            'taxInt' => 1234567890123,     // хост: int (13 цифр влезают в int)
+            'taxStr' => '1234567890123',   // хост: строка
+        ]);
+
+        // Поле-int против строкового литерала: приводится к числу (bccomp).
+        $this->interpreter->evaluate("results.a = (taxInt == '1234567890123')");
+        $this->assertTrue($this->results['a']);
+
+        // Поле-строка против строкового литерала: точное равенство строк.
+        $this->interpreter->evaluate("results.b = (taxStr == '1234567890123')");
+        $this->assertTrue($this->results['b']);
+
+        // И против числового литерала — тоже совпадает.
+        $this->interpreter->evaluate("results.c = (taxInt == 1234567890123)");
+        $this->assertTrue($this->results['c']);
+
+        $this->interpreter->evaluate("results.d = (taxStr == 1234567890123)");
+        $this->assertTrue($this->results['d']);
+
+        // Несовпадение корректно даёт false.
+        $this->interpreter->evaluate("results.e = (taxInt == '9999999999999')");
+        $this->assertFalse($this->results['e']);
+    }
 }
