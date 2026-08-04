@@ -61,6 +61,27 @@ class OrderExpressionTest extends TestCase
         $this->assertEquals(1000.99, $usedVars['Order.Goods.Price']);;
     }
 
+    public function testLongReceiptNumber(): void
+    {
+        // Order.Receipt — 20-значное число, заданное строкой (не влезает в int).
+
+        // 1. Вывод на экран: значение сохраняется как строка, без float.
+        $this->interpreter->evaluate("Result.rez = Order.Receipt");
+        $usedVars = $this->interpreter->getUsedVariables();
+        $this->assertSame('12345678901234567890', $usedVars['Result.rez']);
+        $this->assertIsString($usedVars['Result.rez']);
+
+        // 2. Арифметика без потери точности (bcmath), результат — строка.
+        $this->interpreter->evaluate("Result.rez = Order.Receipt + 1");
+        $usedVars = $this->interpreter->getUsedVariables();
+        $this->assertSame('12345678901234567891', $usedVars['Result.rez']);
+
+        // 3. Сравнение с большим числовым литералом.
+        $this->interpreter->evaluate("Result.rez = (Order.Receipt == 12345678901234567890)");
+        $usedVars = $this->interpreter->getUsedVariables();
+        $this->assertTrue($usedVars['Result.rez']);
+    }
+
     public function testAppleDetection(): void
     {
         $this->interpreter->evaluate(

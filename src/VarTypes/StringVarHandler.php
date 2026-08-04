@@ -96,8 +96,10 @@ class StringVarHandler extends SimpleVarHandler
 
     public function toNum(): NumVarHandler
     {
-        // Строка с точкой — десятичное число, иначе целое (без float).
-        if (is_numeric($this->var) && strpos((string)$this->var, '.') !== false) {
+        // Дробное или слишком большое для int (например, 20-значный номер
+        // чека, заданный строкой) — decimal/bignum через bcmath, иначе целое.
+        // Так исключаем и float, и переполнение int с потерей точности.
+        if (DecimalVarHandler::needsDecimal($this->var)) {
             return new DecimalVarHandler('temp', $this->var, null, $this->storage);
         }
         $value = (int)$this->var;

@@ -48,6 +48,34 @@ class DecimalVarHandler extends NumVarHandler
     }
 
     /**
+     * Нужно ли обрабатывать значение как decimal/bignum (а не как int).
+     *
+     * true для: float, чисел «с точкой», экспоненциальной записи и целых,
+     * которые НЕ помещаются в диапазон PHP int (например, 20-значный номер
+     * чека Receipt). Такие значения нельзя приводить к int — будет переполнение
+     * и превращение во float с потерей точности.
+     */
+    public static function needsDecimal($value): bool
+    {
+        if (is_float($value)) {
+            return true;
+        }
+        if (is_int($value) || is_bool($value) || $value === null) {
+            return false;
+        }
+        $s = trim((string)$value);
+        if ($s === '' || !is_numeric($s)) {
+            return false;
+        }
+        if (strpos($s, '.') !== false || stripos($s, 'e') !== false) {
+            return true;
+        }
+        // Целое число-строка: decimal нужен, только если оно выходит за int.
+        return bccomp($s, (string)PHP_INT_MAX, 0) > 0
+            || bccomp($s, (string)PHP_INT_MIN, 0) < 0;
+    }
+
+    /**
      * Приводит произвольное значение к строке-десятичному числу без экспоненты.
      */
     protected static function toDecimalString($value): string
@@ -76,7 +104,14 @@ class DecimalVarHandler extends NumVarHandler
             return $s;
         }
         $s = trim((string)$value);
-        return is_numeric($s) ? $s : '0';
+        if (!is_numeric($s)) {
+            return '0';
+        }
+        // Строка в экспоненциальной записи → разворачиваем в обычную десятичную.
+        if (stripos($s, 'e') !== false) {
+            return number_format((float)$s, self::$scale, '.', '');
+        }
+        return $s;
     }
 
     /**
