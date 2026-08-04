@@ -130,6 +130,10 @@ class SimpleVarHandler extends AbstractVariableHandler
 
     public function toNum(): ?NumVarHandler
     {
+        // Значение с точкой — десятичное число (без float), иначе целое.
+        if (is_numeric($this->var) && strpos((string)$this->var, '.') !== false) {
+            return new DecimalVarHandler('temp', $this->var, null, $this->storage);
+        }
         return new NumVarHandler('temp', $this->var, null, $this->storage);
     }
 

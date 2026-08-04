@@ -12,6 +12,7 @@ class VariableHandlerFactory
         VarTypes\DateTimeIntervalVarHandler::class,
         VarTypes\ObjectHandler::class,
         VarTypes\BoolVarHandler::class,
+        VarTypes\DecimalVarHandler::class,
         VarTypes\NumVarHandler::class,
         VarTypes\StringVarHandler::class,
         VarTypes\ArrayHandler::class,
@@ -45,6 +46,10 @@ class VariableHandlerFactory
         
         switch ($token->getType()) {
             case 'number':
+                // Число «с точкой» — десятичный тип (строка + bcmath), иначе целое.
+                if (strpos((string)$variable, '.') !== false) {
+                    return new VarTypes\DecimalVarHandler($safeName, $variable, $parent, $storage);
+                }
                 return new VarTypes\NumVarHandler($safeName, $variable, $parent, $storage);
             case 'string':
                 return new VarTypes\StringVarHandler($safeName, $variable, $parent, $storage);
@@ -55,7 +60,11 @@ class VariableHandlerFactory
                     if (preg_match("/^'([^']*)'$/", $el, $match)) {
                         return $match[1];
                     }
-                    return is_numeric($el) ? (int)$el : $el;
+                    if (is_numeric($el)) {
+                        // Дробные оставляем строкой (decimal), целые — int.
+                        return strpos($el, '.') !== false ? $el : (int)$el;
+                    }
+                    return $el;
                 }, $elements);
 
                 return new VarTypes\ArrayHandler($safeName, $value, $parent, $storage);

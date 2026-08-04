@@ -17,7 +17,8 @@ PHP-коду нет. Любое изменение, ослабляющее эт�
 
 - PHP 8.4 (используются typed properties, `mixed`, union-типы).
 - PSR-4 автозагрузка, **namespace `iustato\Bql`** (строчными буквами!).
-- PHPUnit 10 для тестов. Единственная runtime-зависимость — `ext-ctype`.
+- PHPUnit 10 для тестов. Runtime-зависимости — `ext-ctype` и `ext-bcmath`
+  (bcmath нужен для decimal-арифметики, см. `DecimalVarHandler`).
 
 ## Команды
 
@@ -73,7 +74,8 @@ php examples/index.php           # ручная песочница для быс
 
 | Handler | Для чего |
 |---|---|
-| `NumVarHandler` | int/float — вся арифметика и сравнения |
+| `NumVarHandler` | ТОЛЬКО целые (int). Арифметика и сравнения целых. При смешении с decimal и при делении не нацело результат «поднимается» до decimal |
+| `DecimalVarHandler` | Числа «с точкой». Понятия float в интерпретаторе НЕТ: значение хранится строкой, все операции — через **bcmath** (`bcadd/bcsub/bcmul/bcdiv/bccomp`). Хост-float усыновляется как decimal |
 | `StringVarHandler` | строки, `like`, конкатенация `.` |
 | `BoolVarHandler` | булевы |
 | `ArrayHandler` | массивы, оператор `in` |

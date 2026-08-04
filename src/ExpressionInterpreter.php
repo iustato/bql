@@ -18,32 +18,55 @@ class ExpressionInterpreter
     {
         $this->variableStorage = new VariableStorage();
 
-        // Регистрация операторов
-        $this->registerOperator('=', 1, 'left', true, 2);
-        $this->registerOperator('&&', 3, 'right');
-        $this->registerOperator('AND', 3, 'right');
-        $this->registerOperator('||', 2);
-        $this->registerOperator('OR', 2);
-        $this->registerOperator('!', 5, 'right', false, 1);
-        $this->registerOperator('<', 4);
-        $this->registerOperator('>', 4);
-        $this->registerOperator('<=', 4);
-        $this->registerOperator('>=', 4);
-        $this->registerOperator('==', 4);
-        $this->registerOperator('!=', 4);
-        $this->registerOperator('??', 3);
-        $this->registerOperator('in', 4);
-        $this->registerOperator('like', 4);
+        // Регистрация операторов.
+        // Приоритет: чем БОЛЬШЕ число, тем сильнее связывание (см. shunting-yard
+        // в toReversePolishNotation). Порядок — как в большинстве языков:
+        //   присваивание < ?? < || < && < равенство < сравнения
+        //     < + - . < * / < унарный ! < ++ --
+        // Ключевое: арифметика связывается СИЛЬНЕЕ сравнений, поэтому
+        // `1 + 2 == 3` разбирается как `(1 + 2) == 3`, а не `1 + (2 == 3)`.
 
-        $this->registerOperator('+', 3, 'left', false, 2);
-        $this->registerOperator('.', 3, 'left', false, 2);
-        $this->registerOperator('-', 3, 'left', false, 2);
-        $this->registerOperator('*', 4, 'left', false, 2);
-        $this->registerOperator('/', 4, 'left', false, 2);
-        $this->registerOperator('++', 5, 'right', true, 1);
-        $this->registerOperator('--', 5, 'right', true, 1);
-        $this->registerOperator('+=', 3, 'left', true, 2);
-        $this->registerOperator('-=', 3, 'left', true, 2);
+        // Присваивание (самый низкий приоритет).
+        $this->registerOperator('=', 1, 'right', true, 2);
+        $this->registerOperator('+=', 1, 'right', true, 2);
+        $this->registerOperator('-=', 1, 'right', true, 2);
+
+        // Слияние null.
+        $this->registerOperator('??', 2, 'right');
+
+        // Логическое ИЛИ.
+        $this->registerOperator('||', 3, 'left');
+        $this->registerOperator('OR', 3, 'left');
+
+        // Логическое И.
+        $this->registerOperator('&&', 4, 'left');
+        $this->registerOperator('AND', 4, 'left');
+
+        // Равенство.
+        $this->registerOperator('==', 5);
+        $this->registerOperator('!=', 5);
+
+        // Сравнения и поиск в множестве.
+        $this->registerOperator('<', 6);
+        $this->registerOperator('>', 6);
+        $this->registerOperator('<=', 6);
+        $this->registerOperator('>=', 6);
+        $this->registerOperator('in', 6);
+        $this->registerOperator('like', 6);
+
+        // Аддитивные и конкатенация.
+        $this->registerOperator('+', 7, 'left', false, 2);
+        $this->registerOperator('-', 7, 'left', false, 2);
+        $this->registerOperator('.', 7, 'left', false, 2);
+
+        // Мультипликативные.
+        $this->registerOperator('*', 8, 'left', false, 2);
+        $this->registerOperator('/', 8, 'left', false, 2);
+
+        // Унарные (самый высокий приоритет).
+        $this->registerOperator('!', 9, 'right', false, 1);
+        $this->registerOperator('++', 10, 'right', true, 1);
+        $this->registerOperator('--', 10, 'right', true, 1);
 
 
         // Регистрация встроенных функций

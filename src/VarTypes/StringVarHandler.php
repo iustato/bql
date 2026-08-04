@@ -96,7 +96,11 @@ class StringVarHandler extends SimpleVarHandler
 
     public function toNum(): NumVarHandler
     {
-        $value = (float)$this->var;
+        // Строка с точкой — десятичное число, иначе целое (без float).
+        if (is_numeric($this->var) && strpos((string)$this->var, '.') !== false) {
+            return new DecimalVarHandler('temp', $this->var, null, $this->storage);
+        }
+        $value = (int)$this->var;
         return new NumVarHandler('temp', $value, null, $this->storage);
     }
 
