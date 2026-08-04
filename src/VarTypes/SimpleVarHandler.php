@@ -3,7 +3,6 @@
 namespace iustato\Bql\VarTypes;
 
 use iustato\Bql\VariableStorage;
-use MongoDB\BSON\PackedArray;
 
 class SimpleVarHandler extends AbstractVariableHandler
 {
