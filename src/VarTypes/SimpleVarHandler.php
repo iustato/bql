@@ -3,7 +3,6 @@
 namespace iustato\Bql\VarTypes;
 
 use iustato\Bql\VariableStorage;
-use MongoDB\BSON\PackedArray;
 
 class SimpleVarHandler extends AbstractVariableHandler
 {
@@ -130,6 +129,7 @@ class SimpleVarHandler extends AbstractVariableHandler
 
     public function toNum(): ?NumVarHandler
     {
+        // Единый NumVarHandler сам выберет представление (int / строка bcmath).
         return new NumVarHandler('temp', $this->var, null, $this->storage);
     }
 

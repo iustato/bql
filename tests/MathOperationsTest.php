@@ -46,6 +46,25 @@ class MathOperationsTest extends TestCase
         $this->assertEquals(0.05, $this->results['complex2']);
     }
 
+    public function testOperatorPrecedence(): void
+    {
+        // Арифметика связывается сильнее сравнения: (a + b*c) сначала, потом ==.
+        $this->interpreter->evaluate("results.p1 = a + b * c");
+        $this->assertEquals(20, $this->results['p1']); // 10 + (5*2)
+
+        // Без скобок: (1 + 2) == 3, а не 1 + (2 == 3).
+        $this->interpreter->evaluate("results.p2 = 1 + 2 == 3");
+        $this->assertTrue($this->results['p2']);
+
+        // Сравнение связывается сильнее логического И.
+        $this->interpreter->evaluate("results.p3 = a > b && b > c");
+        $this->assertTrue($this->results['p3']);
+
+        // То же для decimal (bcmath): 0.1 + 0.2 == 0.3 без ошибки точности.
+        $this->interpreter->evaluate("results.p4 = 0.1 + 0.2 == 0.3");
+        $this->assertTrue($this->results['p4']);
+    }
+
     public function testComparisonOperators(): void
     {
         $this->interpreter->evaluate("results.greater = a > b");

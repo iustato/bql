@@ -12,13 +12,26 @@ class Order
     public $CreateTime;
     private bool $allow_order = false;
 
-    public function __construct(Customer $customer, Goods $goods, int $qnt)
+    /**
+     * Номер чека — длинное число (до 20 знаков). Хранится СТРОКОЙ: 20-значное
+     * число не помещается в PHP int и было бы превращено во float с потерей
+     * точности. Интерпретатор обрабатывает его как decimal/bignum (bcmath).
+     */
+    public string $Receipt;
+
+    public function __construct(Customer $customer, Goods $goods, int $qnt, string $receipt = '12345678901234567890')
     {
         $this->Customer = $customer;
         $this->Goods = $goods;
         $this->Qnt = $qnt;
         $this->CreateTime = date('Y-m-d H:i:s');
         $this->discount_sum = 0;
+        $this->Receipt = $receipt;
+    }
+
+    public function getReceipt(): string
+    {
+        return $this->Receipt;
     }
 
     public function setDiscount($value): void

@@ -62,6 +62,10 @@ class StringVarHandler extends SimpleVarHandler
             case '-=':
             case '*':
             case '/':
+            case '>':
+            case '>=':
+            case '<':
+            case '<=':
                 // Приводим строку к числу и выполняем математическую операцию
                 $numHandler = $this->toNum();
                 return $numHandler->operatorCall($operator, $varB);
@@ -92,8 +96,10 @@ class StringVarHandler extends SimpleVarHandler
 
     public function toNum(): NumVarHandler
     {
-        $value = (float)$this->var;
-        return new NumVarHandler('temp', $value, null, $this->storage);
+        // NumVarHandler сам разберёт: целое → int, дробное/большое (например,
+        // 20-значный номер чека строкой) → строка через bcmath, без float
+        // и без переполнения int.
+        return new NumVarHandler('temp', $this->var, null, $this->storage);
     }
 
     public function convertToMe(AbstractVariableHandler $var)

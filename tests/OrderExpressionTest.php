@@ -25,6 +25,7 @@ class OrderExpressionTest extends TestCase
             'AllowPay' => false,
             'HaveDiscount' => false,
             'IsApple' => false,
+            'NewAge' => false,
             'rez' => &$rez
         ];
 
@@ -53,6 +54,32 @@ class OrderExpressionTest extends TestCase
         );
 
         $this->assertFalse($this->results['HaveDiscount']); // 999.99 * 5 = 4999.95 < 5000
+
+        $this->interpreter->evaluate("Order.Goods.Price++;");
+        $usedVars = $this->interpreter->getUsedVariables();
+
+        $this->assertEquals(1000.99, $usedVars['Order.Goods.Price']);;
+    }
+
+    public function testLongReceiptNumber(): void
+    {
+        // Order.Receipt — 20-значное число, заданное строкой (не влезает в int).
+
+        // 1. Вывод на экран: значение сохраняется как строка, без float.
+        $this->interpreter->evaluate("Result.rez = Order.Receipt");
+        $usedVars = $this->interpreter->getUsedVariables();
+        $this->assertSame('12345678901234567890', $usedVars['Result.rez']);
+        $this->assertIsString($usedVars['Result.rez']);
+
+        // 2. Арифметика без потери точности (bcmath), результат — строка.
+        $this->interpreter->evaluate("Result.rez = Order.Receipt + 1");
+        $usedVars = $this->interpreter->getUsedVariables();
+        $this->assertSame('12345678901234567891', $usedVars['Result.rez']);
+
+        // 3. Сравнение с большим числовым литералом.
+        $this->interpreter->evaluate("Result.rez = (Order.Receipt == 12345678901234567890)");
+        $usedVars = $this->interpreter->getUsedVariables();
+        $this->assertTrue($usedVars['Result.rez']);
     }
 
     public function testAppleDetection(): void
@@ -78,11 +105,29 @@ class OrderExpressionTest extends TestCase
         $this->interpreter->evaluate("Result.AllowPay = !(Order.Customer.Country in prohibited_countries)");
 
         $this->assertFalse($this->results['AllowPay']);
+    }
 
-        $this->interpreter->evaluate("Result.rez = Order.Goods.Price");
+
+    public function testAddressingObjectsViaMagicMethods(): void
+    {
+        $iranCustomer = new Customer("Ahmad Khan", "AFG",27);
+        $iranOrder = new Order($iranCustomer, new Goods("Test", 100, "Test", "AFG"), 1);
+
+        $this->interpreter->setVariables([
+            'Order' => $iranOrder,
+            'Result' => &$this->results,
+            'prohibited_countries' => ['IRN', 'AFG']
+        ]);
+
+        $this->interpreter->evaluate("Result.rez = Order.Customer.Age");
         $usedVars = $this->interpreter->getUsedVariables();
 
-        $this->assertEquals(100, $usedVars['Result.rez']);;
+        $this->assertEquals(27, $usedVars['Result.rez']);;
 
+        $this->interpreter->evaluate("Order.Customer.Age++; Result.NewAge = Order.Customer.Age;");;
+        $usedVars = $this->interpreter->getUsedVariables();
+
+        $this->assertEquals(28, $usedVars['Order.Customer.Age']);;
+        $this->assertEquals(28, $usedVars['Result.NewAge']);;
     }
 }

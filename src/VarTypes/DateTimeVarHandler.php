@@ -50,8 +50,8 @@ class DateTimeVarHandler extends AbstractVariableHandler
             $errors = DateTime::getLastErrors();
             if (
                 $dt &&
-                $errors['warning_count'] === 0 &&
-                $errors['error_count'] === 0 &&
+                (!$errors || $errors['warning_count'] === 0 &&
+                $errors['error_count'] === 0 )&&
                 $dt->format($format) === $date
             ) {
                 return true;
@@ -277,7 +277,8 @@ class DateTimeVarHandler extends AbstractVariableHandler
                     $result = $this->compareDateTime($operator, $varB->datetime);
                 } else {
                     try {
-                        $otherDateTime = new DateTime($varB->toString());
+                        $stringVal = $varB->get();
+                        $otherDateTime = new DateTime($stringVal);
                         $result = $this->compareDateTime($operator, $otherDateTime);
                     } catch (\Exception $e) {
                         $result = false;

@@ -45,6 +45,8 @@ class VariableHandlerFactory
         
         switch ($token->getType()) {
             case 'number':
+                // Единый числовой обработчик: сам решит, целое это (int) или
+                // дробное/большое (строка + bcmath).
                 return new VarTypes\NumVarHandler($safeName, $variable, $parent, $storage);
             case 'string':
                 return new VarTypes\StringVarHandler($safeName, $variable, $parent, $storage);
@@ -55,7 +57,12 @@ class VariableHandlerFactory
                     if (preg_match("/^'([^']*)'$/", $el, $match)) {
                         return $match[1];
                     }
-                    return is_numeric($el) ? (int)$el : $el;
+                    if (is_numeric($el)) {
+                        // Обычные целые — int, дробные и большие — строка (bignum),
+                        // как и во внутреннем представлении NumVarHandler.
+                        return VarTypes\NumVarHandler::present(VarTypes\NumVarHandler::toNumericString($el));
+                    }
+                    return $el;
                 }, $elements);
 
                 return new VarTypes\ArrayHandler($safeName, $value, $parent, $storage);

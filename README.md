@@ -21,11 +21,16 @@
 + in	Проверка в массиве
 + like	Поиск по шаблону (аналог SQL LIKE)
 
+Поддерживаемые функции:
++ var = iif (condition, true_result, false_result);
++ var = min (5, 10 23, 3, 55, 16);
++ var = max (5, 10 23, 3, 55, 16);
+
 Поддерживает добавление собственных операторов
 
 **Простой пример**
 ```php
-use Iustato\Bql\ExpressionInterpreter;
+use iustato\Bql\ExpressionInterpreter;
 
 $bql = new ExpressionInterpreter();
 

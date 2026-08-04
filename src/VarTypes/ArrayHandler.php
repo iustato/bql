@@ -91,7 +91,7 @@ class ArrayHandler extends AbstractVariableHandler
 
     public function toNum(): NumVarHandler
     {
-        $value = (float)count($this->array);
+        $value = count($this->array);
         return new NumVarHandler('temp', $value, null, $this->storage);
     }
 
