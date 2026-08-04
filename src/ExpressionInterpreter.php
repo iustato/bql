@@ -222,211 +222,254 @@ class ExpressionInterpreter
         return $results;
     }
 
-    /* @return Token[][] */
+    /**
+     * Разбивает выражение на команды (по ';') и токены с помощью конечного автомата.
+     *
+     * Логика разнесена на маленькие обработчики: кросс-режимные правила (конец команды,
+     * пробелы, скобки) остаются в цикле, а поведение каждого состояния вынесено в
+     * отдельный метод, работающий с общим {@see TokenizerState}.
+     *
+     * @return Token[][]
+     */
     public function tokenizeWithAutomaton(string $expression): array
     {
-        $tokens = [];
+        $st = new TokenizerState();
         $length = strlen($expression);
-        $currentToken = '';
-        $state = 'default';
-        $commands = [];
-        $nestedLevel = 0; // Для отслеживания вложенности массивов
 
         for ($i = 0; $i < $length; $i++) {
             $char = $expression[$i];
 
-            // Обработка строк отдельно
-            if ($state == 'string') {
-                if ($char === "'") {
-                    $tokens[] = new Token('string', $currentToken);
-                    $currentToken = '';
-                    $state = 'default';
-                } else {
-                    $currentToken .= $char;
-                }
+            // Режимы, поглощающие любой символ до собственного терминатора.
+            if ($st->name === 'string') {
+                $this->consumeString($st, $char);
+                continue;
+            }
+            if ($st->name === 'method_params') {
+                $this->consumeMethodParams($st, $char);
                 continue;
             }
 
-            // Обработка параметров методов отдельно
-            if ($state == 'method_params') {
-                $currentToken .= $char;
-                if ($char === ')') {
-                    $tokens[] = new Token('method_call', $currentToken);
-                    $currentToken = '';
-                    $state = 'default';
-                }
-                continue;
-            }
-
-            // Обработка конца команды
+            // Конец команды.
             if ($char === ';') {
-                if ($currentToken !== '') {
-                    $this->finalizeCurrentToken($tokens, $currentToken, $state);
-                    $currentToken = '';
-                    $state = 'default';
-                }
-
-                if (!empty($tokens)) {
-                    $commands[] = $tokens;
-                    $tokens = [];
-                }
+                $this->flushToken($st);
+                $this->flushCommand($st);
                 continue;
             }
 
-            // Обработка пробелов (кроме состояния array, function_call) т.к. для них скобки это часть процесса
-            if ( !in_array($state, ['array', 'function_call'])  && ctype_space($char)) {
-                if ($currentToken !== '') {
-                    $this->finalizeCurrentToken($tokens, $currentToken, $state);
-                    $currentToken = '';
-                    $state = 'default';
-                }
+            // Для литералов массива и вызова функции пробелы и скобки — часть токена.
+            $isLiteral = ($st->name === 'array' || $st->name === 'function_call');
+
+            if (!$isLiteral && ctype_space($char)) {
+                $this->flushToken($st);
                 continue;
             }
 
-
-        // Обработка скобок (кроме состояния array)
-        if (!in_array($state, ['array', 'function_call']) && ($char === '(' || $char === ')')) {
-            if ($state == 'identifier' && $char === '(') {
-                //$currentToken .= $char;
-                $state = 'function_call';
-            }
-            else
-            {
-                if ($currentToken !== '') {
-                    // Специальная обработка для вызовов методов
-                    if ($state == 'sausage' && $char === '(' && preg_match('/\.(toString|toNum)$/', $currentToken)) {
-                        $currentToken .= $char;
-                        $state = 'method_params';
-                        continue;
-                    } else {
-                        $this->finalizeCurrentToken($tokens, $currentToken, $state);
-                        $currentToken = '';
-                        $state = 'default';
-                    }
+            if (!$isLiteral && ($char === '(' || $char === ')')) {
+                // handleParenthesis() возвращает false только для 'identifier(' — тогда
+                // символ '(' нужно пробросить в состояние 'function_call' ниже.
+                if ($this->handleParenthesis($st, $char)) {
+                    continue;
                 }
-                // Добавляем скобку как отдельный токен parenthesis
-                $tokens[] = new Token('parenthesis', $char);
-                continue;
+            }
+
+            $this->advanceState($st, $char);
+
+            if ($st->reconsider) {
+                $st->reconsider = false;
+                $i--; // Пересмотреть текущий символ в состоянии 'default'.
             }
         }
 
-            switch ($state) {
-                case 'default':
-                    if ($char === "'") {
-                        $state = 'string';
-                    } elseif ($char === '[') {
-                        $currentToken = $char;
-                        $state = 'array';
-                        $nestedLevel = 1;
-                    } elseif (ctype_digit($char)) {
-                        $currentToken = $char;
-                        $state = 'number';
-                    } elseif (ctype_alpha($char) || $char === '_') {
-                        $currentToken = $char;
-                        $state = 'identifier';
-                    } elseif (!ctype_space($char)) {
-                        $currentToken = $char;
-                        $state = 'operator';
-                    }
-                    break;
+        // Завершаем последний токен и команду.
+        $this->flushToken($st);
+        $this->flushCommand($st);
 
-                case 'number':
-                    if (ctype_digit($char) || $char === '.') {
-                        $currentToken .= $char;
-                    } else {
-                        $tokens[] = new Token('number', $currentToken);
-                        $currentToken = '';
-                        $state = 'default';
-                        $i--; // Пересмотреть текущий символ
-                    }
-                    break;
+        return $st->commands;
+    }
 
-                case 'array':
-                    $currentToken .= $char;
-                    if ($char === ']') {
-                        $nestedLevel--;
-                        if ($nestedLevel <= 0) {
-                            $tokens[] = new Token('array', $currentToken);
-                            $currentToken = '';
-                            $state = 'default';
-                        }
-                    } elseif ($char === '[') {
-                        $nestedLevel++;
-                    }
-                    break;
+    /**
+     * Завершает накопленный токен (если он есть) и возвращает автомат в 'default'.
+     */
+    private function flushToken(TokenizerState $st): void
+    {
+        if ($st->buffer !== '') {
+            $this->finalizeCurrentToken($st->tokens, $st->buffer, $st->name);
+            $st->buffer = '';
+        }
+        $st->name = 'default';
+    }
 
-                // В case 'identifier' добавить обработку функций:
-                case 'identifier':
-                    if (ctype_alnum($char) || $char === '_') {
-                        $currentToken .= $char;
-                    } elseif ($char === '.') {
-                        $currentToken .= $char;
-                        $state = 'sausage';
-                    } else {
-                        $tokens[] = new Token('identifier', $currentToken);
-                        $currentToken = '';
-                        $state = 'default';
-                        $i--; // Пересмотреть текущий символ
-                    }
-                    break;
-
-                case 'sausage':
-                    if (ctype_alnum($char) || $char === '_' || $char === '.') {
-                        $currentToken .= $char;
-                    } else {
-                        // Проверяем, не является ли это вызовом метода
-                        if ($char === '(' && preg_match('/\.(toString|toNum)$/', $currentToken)) {
-                            $currentToken .= $char;
-                            $state = 'method_params';
-                        } else {
-                            $tokens[] = new Token('sausage', $currentToken);
-                            $currentToken = '';
-                            $state = 'default';
-                            $i--; // Пересмотреть текущий символ
-                        }
-                    }
-                    break;
-
-                case 'operator':
-                    if (!ctype_alnum($char) && $char !== '_' && !ctype_space($char) && $char !== '(' && $char !== ')') {
-                        $currentToken .= $char;
-                    } else {
-                        $tokens[] = new Token('operator', strtolower($currentToken));
-                        $currentToken = '';
-                        $state = 'default';
-                        $i--; // Пересмотреть текущий символ
-                    }
-                    break;
-
-                // Добавить новое состояние для обработки вызовов функций:
-                case 'function_call':
-                    $currentToken .= $char;
-                    if ($char === '(') {
-                        $nestedLevel++;
-                    } elseif ($char === ')') {
-                        $nestedLevel--;
-                        if ($nestedLevel <= 0) {
-                            $tokens[] = new FunctionCallToken( $currentToken);
-                            $currentToken = '';
-                            $state = 'default';
-                        }
-                    }
-                    break;
+    /**
+     * Закрывает текущую команду, перенося её токены в список команд.
+     */
+    private function flushCommand(TokenizerState $st): void
+    {
+        if (!empty($st->tokens)) {
+            $st->commands[] = $st->tokens;
+            $st->tokens = [];
         }
     }
 
-    // Завершаем последний токен
-    if ($currentToken !== '') {
-        $this->finalizeCurrentToken($tokens, $currentToken, $state);
+    /** Является ли буфер обращением к методу '.toString'/'.toNum'. */
+    private function isMethodCall(string $buffer): bool
+    {
+        return (bool) preg_match('/\.(toString|toNum)$/', $buffer);
     }
 
-    // Добавляем последнюю команду
-    if (!empty($tokens)) {
-        $commands[] = $tokens;
+    /** Состояние 'string': копим символы до закрывающей кавычки. */
+    private function consumeString(TokenizerState $st, string $char): void
+    {
+        if ($char === "'") {
+            $st->tokens[] = new Token('string', $st->buffer);
+            $st->buffer = '';
+            $st->name = 'default';
+        } else {
+            $st->buffer .= $char;
+        }
     }
 
-    return $commands;
-}
+    /** Состояние 'method_params': копим символы до закрывающей скобки. */
+    private function consumeMethodParams(TokenizerState $st, string $char): void
+    {
+        $st->buffer .= $char;
+        if ($char === ')') {
+            $st->tokens[] = new Token('method_call', $st->buffer);
+            $st->buffer = '';
+            $st->name = 'default';
+        }
+    }
+
+    /**
+     * Обрабатывает '(' и ')' вне литералов.
+     *
+     * @return bool true — символ полностью обработан; false — 'identifier(' начинает
+     *              вызов функции, символ нужно передать в состояние 'function_call'.
+     */
+    private function handleParenthesis(TokenizerState $st, string $char): bool
+    {
+        // Идентификатор, за которым сразу идёт '(', начинает литерал вызова функции.
+        if ($st->name === 'identifier' && $char === '(') {
+            $st->name = 'function_call';
+            return false;
+        }
+
+        if ($st->buffer !== '') {
+            // '.toString(' / '.toNum(' у вложенной переменной начинает вызов метода.
+            if ($st->name === 'sausage' && $char === '(' && $this->isMethodCall($st->buffer)) {
+                $st->buffer .= $char;
+                $st->name = 'method_params';
+                return true;
+            }
+            $this->flushToken($st);
+        }
+
+        $st->tokens[] = new Token('parenthesis', $char);
+        return true;
+    }
+
+    /**
+     * Выполняет один шаг автомата для классифицирующих и литеральных состояний.
+     */
+    private function advanceState(TokenizerState $st, string $char): void
+    {
+        switch ($st->name) {
+            case 'default':
+                if ($char === "'") {
+                    $st->name = 'string';
+                } elseif ($char === '[') {
+                    $st->buffer = $char;
+                    $st->name = 'array';
+                    $st->depth = 1;
+                } elseif (ctype_digit($char)) {
+                    $st->buffer = $char;
+                    $st->name = 'number';
+                } elseif (ctype_alpha($char) || $char === '_') {
+                    $st->buffer = $char;
+                    $st->name = 'identifier';
+                } elseif (!ctype_space($char)) {
+                    $st->buffer = $char;
+                    $st->name = 'operator';
+                }
+                break;
+
+            case 'number':
+                if (ctype_digit($char) || $char === '.') {
+                    $st->buffer .= $char;
+                } else {
+                    $st->tokens[] = new Token('number', $st->buffer);
+                    $this->resetForReconsider($st);
+                }
+                break;
+
+            case 'array':
+                $st->buffer .= $char;
+                if ($char === ']') {
+                    if (--$st->depth <= 0) {
+                        $st->tokens[] = new Token('array', $st->buffer);
+                        $st->buffer = '';
+                        $st->name = 'default';
+                    }
+                } elseif ($char === '[') {
+                    $st->depth++;
+                }
+                break;
+
+            case 'identifier':
+                if (ctype_alnum($char) || $char === '_') {
+                    $st->buffer .= $char;
+                } elseif ($char === '.') {
+                    $st->buffer .= $char;
+                    $st->name = 'sausage';
+                } else {
+                    $st->tokens[] = new Token('identifier', $st->buffer);
+                    $this->resetForReconsider($st);
+                }
+                break;
+
+            case 'sausage':
+                if (ctype_alnum($char) || $char === '_' || $char === '.') {
+                    $st->buffer .= $char;
+                } elseif ($char === '(' && $this->isMethodCall($st->buffer)) {
+                    // Обычно перехватывается в handleParenthesis(); оставлено для полноты.
+                    $st->buffer .= $char;
+                    $st->name = 'method_params';
+                } else {
+                    $st->tokens[] = new Token('sausage', $st->buffer);
+                    $this->resetForReconsider($st);
+                }
+                break;
+
+            case 'operator':
+                if (!ctype_alnum($char) && $char !== '_' && !ctype_space($char) && $char !== '(' && $char !== ')') {
+                    $st->buffer .= $char;
+                } else {
+                    $st->tokens[] = new Token('operator', strtolower($st->buffer));
+                    $this->resetForReconsider($st);
+                }
+                break;
+
+            case 'function_call':
+                $st->buffer .= $char;
+                if ($char === '(') {
+                    $st->depth++;
+                } elseif ($char === ')') {
+                    if (--$st->depth <= 0) {
+                        $st->tokens[] = new FunctionCallToken($st->buffer);
+                        $st->buffer = '';
+                        $st->name = 'default';
+                    }
+                }
+                break;
+        }
+    }
+
+    /** Сбрасывает буфер/состояние и просит повторно рассмотреть текущий символ. */
+    private function resetForReconsider(TokenizerState $st): void
+    {
+        $st->buffer = '';
+        $st->name = 'default';
+        $st->reconsider = true;
+    }
 
 
 public function toReversePolishNotation(array $tokens): array
