@@ -279,6 +279,29 @@ class ExpressionInterpreter
                 continue;
             }
 
+            // Пробел(ы) после идентификатора могут предшествовать '(' — тогда это
+            // всё ещё вызов функции ('iif (...)' эквивалентно 'iif(...)').
+            if ($st->name === 'identifier' && ctype_space($char)) {
+                $st->name = 'identifier_ws';
+                continue;
+            }
+            if ($st->name === 'identifier_ws') {
+                if (ctype_space($char)) {
+                    continue;
+                }
+                if ($char === '(') {
+                    // 'identifier (' — вызов функции с пробелом перед скобкой.
+                    $st->name = 'function_call';
+                    $this->advanceState($st, $char); // buffer .= '(' и depth++
+                    continue;
+                }
+                // Не скобка — идентификатор завершён, символ пересматриваем.
+                $st->name = 'identifier';
+                $this->flushToken($st);
+                $i--;
+                continue;
+            }
+
             // Для литералов массива и вызова функции пробелы и скобки — часть токена.
             $isLiteral = ($st->name === 'array' || $st->name === 'function_call');
 
