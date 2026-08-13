@@ -29,12 +29,40 @@ class VariableStorage {
             return; // Переменная не найдена
         }
         
-        $this->variables[$name]->set($name, $value, true);
+        // Пустой ключ — замена значения переменной целиком. Раньше здесь передавалось
+        // само имя, и обработчики понимали его как ключ внутри значения: присваивание
+        // массива уходило в $arr['arr'], а для скалярной переменной терялось совсем.
+        $this->variables[$name]->set('', $value, true);
+
+        $this->refreshHandler($name);
 
         if ($value instanceof AbstractVariableHandler) {
             $this->modifiedVariables[$name] = $value->get();
         } else {
             $this->modifiedVariables[$name] = $value;
+        }
+    }
+
+    /**
+     * Пересоздаёт обработчик, если присваивание сменило тип значения.
+     *
+     * Обработчик выбирается по типу в момент setVariables(), но выражение может
+     * заменить тип: 'cfg = [{"a":1}]' превращает null в массив. Без пересоздания
+     * у переменной остался бы SimpleVarHandler, и обращение 'cfg.a' ничего бы не
+     * нашло. Ссылка на переменную хост-проекта при этом сохраняется.
+     */
+    private function refreshHandler(string $name): void {
+        $handler = $this->variables[$name];
+        $current = &$handler->get();
+
+        if ($handler::supports($current)) {
+            return;
+        }
+
+        $refreshed = VariableHandlerFactory::createHandler($current, $name, null, $this);
+
+        if ($refreshed) {
+            $this->variables[$name] = $refreshed;
         }
     }
 

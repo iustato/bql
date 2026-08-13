@@ -34,7 +34,8 @@ php examples/index.php           # ручная песочница для быс
 ```
 
 Запускай `composer test` после любого изменения в `src/`. На момент написания:
-35 тестов, 62 проверки — все зелёные (есть 2 deprecation-предупреждения, не критично).
+86 тестов, 166 проверок — все зелёные (есть 2 deprecation-предупреждения PHP 8.4
+про неявный nullable в `registerFunction()`/`executeOperator()`, не критично).
 
 ## Архитектура
 
@@ -43,7 +44,12 @@ php examples/index.php           # ручная песочница для быс
 1. **`tokenizeWithAutomaton(string): Token[][]`** — ручной конечный автомат,
    режет строку на токены. Разделитель команд — `;` (возвращается массив команд,
    каждая — массив токенов). Состояния: `default, string, number, identifier,
-   sausage, operator, array, function_call, method_params`.
+   identifier_ws, sausage, operator, array, function_call, switch_body,
+   method_params`.
+   Состояния-литералы (`array`, `function_call`, `switch_body`, см. константу
+   `LITERAL_STATES`) поглощают всё до своей парной закрывающей скобки, включая
+   `;`. Глубину считает `trackLiteralDepth()`, который пропускает содержимое
+   строк — иначе `]` или `;` внутри JSON-строки обрывали бы литерал.
 2. **`toReversePolishNotation(Token[]): Token[]`** — алгоритм сортировочной станции
    (shunting-yard): учитывает приоритет и ассоциативность операторов, разворачивает
    скобки.
@@ -56,15 +62,25 @@ php examples/index.php           # ручная песочница для быс
 - **`ExpressionInterpreter.php`** — публичный фасад + токенайзер + ОПН + реестры
   операторов и функций. Все операторы регистрируются в конструкторе через
   `registerOperator($op, $precedence, $assoc, $modifiesVariable, $operandCount)`.
-- **`Token.php` / `FunctionCallToken.php`** — единица разбора. `FunctionCallToken`
-  сам парсит `name(arg, arg)` и умеет рекурсивно вычислять аргументы как
-  под-выражения (`evaluateParameters()`).
+- **`Token.php` / `FunctionCallToken.php` / `SwitchToken.php`** — единицы разбора.
+  `FunctionCallToken` сам парсит `name(arg, arg)` и умеет рекурсивно вычислять
+  аргументы как под-выражения (`evaluateParameters()`). `SwitchToken` разбирает
+  тело `{ case cond: result; default: result; }` на плечи и вычисляет их лениво —
+  тело считается только у подошедшего плеча. Оба вычисляют под-выражения через
+  `ExpressionInterpreter::evaluateExpressionToHandler()`.
+- **`LiteralScanner.php`** — режет текст по разделителю верхнего уровня с учётом
+  кавычек и вложенности (`,` для аргументов, `;` и `:` для плеч switch).
+  Наивный `explode()` тут ломается на `'a;b'`, `[1,2]` и `{"a":1}`.
 - **`VariableStorage.php`** — хранит обработчики переменных, отслеживает
   `modifiedVariables` (см. `getModifiedVariables()`) и `usedVariables`
   (`getUsedVariables()`). Предопределены `true`, `false`, `null`.
 - **`VariableHandlerFactory.php`** — выбирает нужный `*VarHandler` по значению
   (`supports()`) или по типу токена. **Порядок в `$availableHandlers` важен** —
   проверка идёт сверху вниз, `SimpleVarHandler` последний как fallback.
+  Здесь же `parseArrayLiteral()`: `[{...}]` → ассоциативный массив (внешние скобки
+  снимаются), `[[1,2],[3,4]]` → строгий JSON, `['a','b']` → исторический разбор по
+  запятой. Числа из JSON нормализуются через `NumVarHandler::present()`, иначе
+  `json_decode()` вернул бы float и обошёл bcmath.
 
 ### Система обработчиков типов (`src/VarTypes/`)
 
@@ -104,6 +120,15 @@ php examples/index.php           # ручная песочница для быс
 - **Изменение по ссылке**: чтобы выражение могло записать значение обратно в
   переменную хоста, её нужно передать по ссылке: `['a' => &$a]`. Иначе изменение
   видно только через `getModifiedVariables()`.
+- **Пустой ключ в `set()`/`get()` значит «значение целиком»**. Сравнивай `$key === ''`,
+  а НЕ `empty($key)`: индекс `'0'` в PHP «пустой», из-за чего обращение `items.0`
+  молча отдавало весь массив вместо элемента.
+- **`ArrayHandler::$array` намеренно `mixed`, а не `array`**: типизированное
+  свойство запирает тип переменной хост-проекта, пока обработчик жив, и
+  присваивание скаляра после массива падало бы с TypeError.
+- **`VariableStorage::refreshHandler()`** пересоздаёт обработчик, если присваивание
+  сменило тип значения (`null` → массив). Без этого `cfg.a` после `cfg = [{"a":1}]`
+  ничего не находило, потому что у переменной оставался `SimpleVarHandler`.
 - **Namespace — строчными**: код использует `iustato\Bql` (см. `composer.json`).
   Не пиши `Iustato\Bql` с заглавной — PSR-4 такой класс не загрузит.
 - Операторы регистрируются в нижнем регистре; словесные (`and`, `in`, `like`)
