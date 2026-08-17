@@ -125,7 +125,7 @@ class JsonPlaceholderTest extends TestCase
         $this->interpreter->evaluate('v = [{"a":"{{ \'{{\' }}not a placeholder}}"}]');
         $this->assertSame('{{not a placeholder}}', $this->v['a']);
 
-        // Закрывающие скобки внутри строки выражения не завершают подстановку.
+        // Закрывающиеа скобки внутри строки выражения не завершают подстановку.
         $this->interpreter->evaluate('v = [{"a":"{{ \'}}\' }}"}]');
         $this->assertSame('}}', $this->v['a']);
     }
