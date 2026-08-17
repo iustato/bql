@@ -39,6 +39,24 @@ class ExpressionInterpreter
     /** Постфиксные операторы: значение слева готово, следующий '-' — бинарный. */
     private const POSTFIX_OPERATORS = ['++', '--'];
 
+    /**
+     * Отрицающие операторы: во что разворачивается 'not <оператор>'.
+     *
+     * Ключ — составной оператор, значение — базовый, результат которого
+     * инвертируется. Реализация одна на все типы значений (см. executeOperator()),
+     * потому что базовые 'in'/'like' всюду возвращают BoolVarHandler — так
+     * отрицание не может разъехаться с исходным оператором.
+     *
+     * Токенайзер отдаёт 'not' и 'in' разными токенами и приставку не распознаёт:
+     * решение принимается по позиции в toReversePolishNotation(), как и у знака
+     * числа (см. UNARY_SIGNS). Составные имена всё же зарегистрированы — именно
+     * запись в реестре несёт приоритет и число операндов.
+     */
+    private const NEGATED_OPERATORS = [
+        'not in' => 'in',
+        'not like' => 'like',
+    ];
+
     public VariableStorage $variableStorage;
     private array $operators = [];
     private array $functions = [];
@@ -82,6 +100,9 @@ class ExpressionInterpreter
         $this->registerOperator('>=', 6);
         $this->registerOperator('in', 6);
         $this->registerOperator('like', 6);
+        // Отрицающие формы — тот же приоритет, что и у базовых (см. NEGATED_OPERATORS).
+        $this->registerOperator('not in', 6);
+        $this->registerOperator('not like', 6);
 
         // Аддитивные и конкатенация.
         $this->registerOperator('+', 7, 'left', false, 2);
@@ -238,6 +259,16 @@ class ExpressionInterpreter
 
         if (!isset($this->operators[$operator_lower])) {
             throw new InvalidArgumentException("Operator '$operator_lower' is not defined.");
+        }
+
+        // 'not in' / 'not like' — это '!' поверх базового оператора. Считаем их
+        // здесь, а не в каждом обработчике значения: базовые операторы всюду
+        // возвращают BoolVarHandler, поэтому отрицание одинаково корректно для
+        // строк, чисел и массивов и не может разойтись с исходным оператором.
+        if (isset(self::NEGATED_OPERATORS[$operator_lower])) {
+            $base = $this->executeOperator(self::NEGATED_OPERATORS[$operator_lower], $a, $b);
+
+            return $base === null ? null : $base->operatorUnaryCall('!');
         }
 
         $operatorConfig = $this->operators[$operator_lower];
@@ -676,8 +707,11 @@ public function toReversePolishNotation(array $tokens): array
     // Ждём ли операнд. В начале выражения — да, поэтому '-' здесь знак числа,
     // а не вычитание. Дальше флаг переключается по ходу потока токенов.
     $expectOperand = true;
+    $tokens = array_values($tokens);
+    $count = count($tokens);
 
-    foreach ($tokens as $token) {
+    for ($i = 0; $i < $count; $i++) {
+        $token = $tokens[$i];
         /*  @var  Token $token */
         $tokenType = $token->getType();
         $tokenValue = $token->getValue();
@@ -688,8 +722,34 @@ public function toReversePolishNotation(array $tokens): array
             $token = new Token('operator', $tokenValue);
         }
 
+        // 'not' в позиции оператора — приставка к следующему слову: 'not in'.
+        // Автомат режет токены по пробелам и операторов из двух слов не знает,
+        // поэтому 'not' всегда приезжает идентификатором — что он такое на самом
+        // деле, видно только по позиции, ровно как у знака числа выше. В позиции
+        // операнда 'not' остаётся обычным именем переменной.
+        if ($tokenType === 'identifier' && !$expectOperand
+            && strtolower((string) $tokenValue) === 'not'
+            && isset($tokens[$i + 1])
+            && $tokens[$i + 1]->getType() === 'operator'
+            && isset(self::NEGATED_OPERATORS['not ' . $tokens[$i + 1]->getValue()])
+        ) {
+            $tokenValue = 'not ' . $tokens[++$i]->getValue();
+            $tokenType = 'operator';
+            $token = new Token('operator', $tokenValue);
+        }
+
         // Функции и другие не-операторы идут прямо в вывод
         if ($tokenType !== 'operator' && $tokenType !== 'parenthesis') {
+            // Два значения подряд — между ними потерян оператор. Молчать тут
+            // нельзя: лишний токен уезжал в стек ОПН, откуда его вытеснял
+            // результат, и '5 not > 1' тихо считалось как 'null > 1'. Ошибка в
+            // правиле должна быть видна, а не превращаться в чужое значение.
+            if (!$expectOperand) {
+                throw new InvalidArgumentException(
+                    "Unexpected '{$tokenValue}': an operator is missing before it."
+                );
+            }
+
             $output[] = $token;
             $expectOperand = false;
         }
@@ -729,7 +789,11 @@ public function toReversePolishNotation(array $tokens): array
             $operators[] = $token;
             // После бинарного и префиксного оператора снова ждём операнд, а вот
             // после постфиксного ('a++ - b') значение уже готово — там '-' бинарный.
-            $expectOperand = !in_array($tokenValue, self::POSTFIX_OPERATORS, true);
+            // У '++'/'--' форму задаёт тот же флаг: в позиции операнда ('--x') это
+            // префикс, и операнд всё ещё нужен, поэтому флаг остаётся как был.
+            if (!in_array($tokenValue, self::POSTFIX_OPERATORS, true)) {
+                $expectOperand = true;
+            }
         }
     }
 

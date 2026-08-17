@@ -19,7 +19,9 @@
 + \&&, AND	Логическое И
 + !	Логическое НЕ
 + in	Проверка в массиве
++ not in	Отрицание `in`: значения нет в массиве
 + like	Поиск по шаблону (аналог SQL LIKE)
++ not like	Отрицание `like`: шаблон не подошёл
 
 Поддерживаемые функции:
 + var = iif (condition, true_result, false_result);
@@ -180,7 +182,7 @@ $variables = [
 $bql->setVariables($variables);
 
 // Проверяем, находится ли страна в списке разрешённых
-$bql->evaluate("res = user_country in allowed_countries; res2 = !( user_country in ['GBR', 'ITA', 'MDA'])");
+$bql->evaluate("res = user_country in allowed_countries; res2 = user_country not in ['GBR', 'ITA', 'MDA']");
 
 $result = $bql->getModifiedVariables();
 

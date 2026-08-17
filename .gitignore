@@ -1,1 +1,8 @@
 .idea
+
+# Личные настройки инструментария: содержат пути конкретной машины.
+# Общекомандный .claude/settings.json, наоборот, отслеживается.
+.claude/settings.local.json
+.mcp.json
+
+.phpunit.result.cache
