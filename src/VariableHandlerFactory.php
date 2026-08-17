@@ -80,7 +80,7 @@ class VariableHandlerFactory
      * JSON-формы имеют приоритет; к разбору по запятой откатываемся только если
      * это не JSON и фигурных скобок в литерале нет.
      */
-    private static function parseArrayLiteral(string $literal): array
+    public static function parseArrayLiteral(string $literal): array
     {
         $trimmed = trim($literal);
 

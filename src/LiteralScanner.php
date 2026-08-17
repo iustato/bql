@@ -80,4 +80,92 @@ class LiteralScanner
 
         return $parts;
     }
+
+    /**
+     * Разбирает текст на литеральные куски и подстановки '{{ выражение }}'.
+     *
+     * Закрывающая пара ищется с учётом кавычек и вложенных фигурных скобок, поэтому
+     * внутри подстановки может стоять целый switch: '{{ switch { case a: 1 } }}'.
+     * Чтобы получить литеральные '{{', используй подстановку со строкой: "{{ '{{' }}".
+     *
+     * @return array<int, array{type: string, value: string}> куски в порядке следования,
+     *         type — 'text' (как есть) или 'expr' (выражение BQL без обрамляющих скобок)
+     */
+    public static function splitPlaceholders(string $text): array
+    {
+        $segments = [];
+        $offset = 0;
+
+        while (($start = strpos($text, '{{', $offset)) !== false) {
+            $end = self::findPlaceholderEnd($text, $start + 2);
+
+            if ($end === null) {
+                throw new \InvalidArgumentException(
+                    "Unterminated placeholder: missing '}}' in '$text'"
+                );
+            }
+
+            if ($start > $offset) {
+                $segments[] = ['type' => 'text', 'value' => substr($text, $offset, $start - $offset)];
+            }
+
+            $segments[] = ['type' => 'expr', 'value' => trim(substr($text, $start + 2, $end - $start - 2))];
+            $offset = $end + 2;
+        }
+
+        if ($offset < strlen($text)) {
+            $segments[] = ['type' => 'text', 'value' => substr($text, $offset)];
+        }
+
+        return $segments;
+    }
+
+    /**
+     * Ищет позицию закрывающих '}}' для подстановки, начатой на $from.
+     *
+     * @return int|null позиция первого символа '}}' либо null, если пара не найдена
+     */
+    private static function findPlaceholderEnd(string $text, int $from): ?int
+    {
+        $depth = 0;
+        $quote = '';
+        $escaped = false;
+        $length = strlen($text);
+
+        for ($i = $from; $i < $length; $i++) {
+            $char = $text[$i];
+
+            if ($quote !== '') {
+                if ($escaped) {
+                    $escaped = false;
+                } elseif ($char === '\\') {
+                    $escaped = true;
+                } elseif ($char === $quote) {
+                    $quote = '';
+                }
+                continue;
+            }
+
+            if ($char === "'" || $char === '"') {
+                $quote = $char;
+                continue;
+            }
+
+            if ($char === '{') {
+                $depth++;
+                continue;
+            }
+
+            if ($char === '}') {
+                // '}}' на нулевой глубине закрывает подстановку; иначе это конец
+                // вложенного блока внутри выражения.
+                if ($depth === 0 && $i + 1 < $length && $text[$i + 1] === '}') {
+                    return $i;
+                }
+                $depth--;
+            }
+        }
+
+        return null;
+    }
 }

@@ -4,6 +4,7 @@ namespace iustato\Bql;
 
 use InvalidArgumentException;
 use iustato\Bql\VarTypes\BoolVarHandler;
+use iustato\Bql\VarTypes\NumVarHandler;
 use iustato\Bql\VarTypes\SimpleVarHandler;
 use LogicException;
 use iustato\Bql\VarTypes\AbstractVariableHandler;
@@ -25,6 +26,19 @@ class ExpressionInterpreter
     /** Методы, вызываемые на переменной как 'var.toString()'. Единый список для обеих регулярок. */
     private const VALUE_METHODS = ['toString', 'toNum', 'toJSON'];
 
+    /**
+     * Знак числа: во что переименовывается оператор, стоящий в позиции операнда.
+     *
+     * На уровне символов '-a' и 'a - b' не различить, поэтому токенайзер всегда
+     * отдаёт обычный '-', а решение принимает {@see toReversePolishNotation()}
+     * по позиции в потоке токенов. Отдельные имена нужны, чтобы у унарной формы
+     * были свои приоритет и количество операндов.
+     */
+    private const UNARY_SIGNS = ['-' => 'u-', '+' => 'u+'];
+
+    /** Постфиксные операторы: значение слева готово, следующий '-' — бинарный. */
+    private const POSTFIX_OPERATORS = ['++', '--'];
+
     public VariableStorage $variableStorage;
     private array $operators = [];
     private array $functions = [];
@@ -37,7 +51,7 @@ class ExpressionInterpreter
         // Приоритет: чем БОЛЬШЕ число, тем сильнее связывание (см. shunting-yard
         // в toReversePolishNotation). Порядок — как в большинстве языков:
         //   присваивание < ?? < || < && < равенство < сравнения
-        //     < + - . < * / < унарный ! < ++ --
+        //     < + - . < * / < унарные ! и знак числа < ++ --
         // Ключевое: арифметика связывается СИЛЬНЕЕ сравнений, поэтому
         // `1 + 2 == 3` разбирается как `(1 + 2) == 3`, а не `1 + (2 == 3)`.
 
@@ -80,6 +94,10 @@ class ExpressionInterpreter
 
         // Унарные (самый высокий приоритет).
         $this->registerOperator('!', 9, 'right', false, 1);
+        // Знак числа ('-5', 'a * -b', '-(a + b)'). Связывается сильнее умножения,
+        // поэтому '-2 * 3' — это '(-2) * 3'. См. UNARY_SIGNS.
+        $this->registerOperator('u-', 9, 'right', false, 1);
+        $this->registerOperator('u+', 9, 'right', false, 1);
         $this->registerOperator('++', 10, 'right', true, 1);
         $this->registerOperator('--', 10, 'right', true, 1);
 
@@ -140,20 +158,13 @@ class ExpressionInterpreter
             }
         }, 3, 3);
 
-        // Функция max
+        // Функции max и min — сравнение через bcmath, см. extremum().
         $this->registerFunction('max', function (...$args) {
-            $values = array_map(function ($arg) {
-                return $arg instanceof AbstractVariableHandler ? $arg->get() : $arg;
-            }, $args);
-            return max($values);
+            return $this->extremum($args, 1);
         }, 1);
 
-        // Функция min
         $this->registerFunction('min', function (...$args) {
-            $values = array_map(function ($arg) {
-                return $arg instanceof AbstractVariableHandler ? $arg->get() : $arg;
-            }, $args);
-            return min($values);
+            return $this->extremum($args, -1);
         }, 1);
 
         // Функция abs
@@ -170,6 +181,54 @@ class ExpressionInterpreter
             }
             return 0;
         }, 1, 1);
+    }
+
+    /**
+     * Общая реализация min/max: выбирает крайнее из чисел через bcmath.
+     *
+     * Нативные min()/max() тут не годятся: PHP сравнивает числовые строки,
+     * скатываясь к float, поэтому значения, различающиеся дальше 17-й значащей
+     * цифры, считались равными — и возвращался просто первый аргумент
+     * (`min(0.30000000000000001, 0.3)` отдавал первый). Оператор '<' на тех же
+     * числах отвечает верно (bccomp), а расхождение между функцией и оператором
+     * недопустимо. Результат нормализуется через present(), поэтому
+     * `min(10.0, 10)` — это int 10, а не строка '10.0'.
+     *
+     * @param array $args аргументы вызова: обработчики или готовые значения
+     * @param int $sign 1 — максимум, -1 — минимум (совпадает с кодом bccomp)
+     * @return mixed выбранное значение
+     */
+    private function extremum(array $args, int $sign)
+    {
+        $values = array_map(function ($arg) {
+            return $arg instanceof AbstractVariableHandler ? $arg->get() : $arg;
+        }, $args);
+
+        // Нечисловые аргументы (строки, массивы, даты) bcmath сравнивать не
+        // умеет — они остаются на нативных min()/max() с их правилами.
+        foreach ($values as $value) {
+            if (!self::isBcOperand($value)) {
+                return $sign > 0 ? max($values) : min($values);
+            }
+        }
+
+        $best = NumVarHandler::toNumericString(array_shift($values));
+
+        foreach ($values as $value) {
+            $candidate = NumVarHandler::toNumericString($value);
+            if (bccomp($candidate, $best, NumVarHandler::$scale) === $sign) {
+                $best = $candidate;
+            }
+        }
+
+        return NumVarHandler::present($best);
+    }
+
+    /** Годится ли значение как операнд bcmath (число или числовая строка). */
+    private static function isBcOperand($value): bool
+    {
+        return is_int($value) || is_float($value)
+            || (is_string($value) && is_numeric(trim($value)));
     }
 
 
@@ -614,20 +673,31 @@ public function toReversePolishNotation(array $tokens): array
 {
     $output = [];
     $operators = [];
+    // Ждём ли операнд. В начале выражения — да, поэтому '-' здесь знак числа,
+    // а не вычитание. Дальше флаг переключается по ходу потока токенов.
+    $expectOperand = true;
 
     foreach ($tokens as $token) {
         /*  @var  Token $token */
         $tokenType = $token->getType();
         $tokenValue = $token->getValue();
 
+        // Знак в позиции операнда — унарная форма: '-5', 'a * -b', '-(a + b)'.
+        if ($tokenType === 'operator' && $expectOperand && isset(self::UNARY_SIGNS[$tokenValue])) {
+            $tokenValue = self::UNARY_SIGNS[$tokenValue];
+            $token = new Token('operator', $tokenValue);
+        }
+
         // Функции и другие не-операторы идут прямо в вывод
         if ($tokenType !== 'operator' && $tokenType !== 'parenthesis') {
             $output[] = $token;
-        } 
+            $expectOperand = false;
+        }
         // Открывающая скобка (не функция)
         elseif ($tokenValue === '(') {
             $operators[] = $token;
-        } 
+            $expectOperand = true;
+        }
         // Закрывающая скобка
         elseif ($tokenValue === ')') {
             // Выталкиваем операторы до открывающей скобки
@@ -636,9 +706,10 @@ public function toReversePolishNotation(array $tokens): array
             }
             // Удаляем открывающую скобку
             if (!empty($operators)) {
-                array_pop($operators); 
+                array_pop($operators);
             }
-        } 
+            $expectOperand = false;
+        }
         // Операторы
         else {
             // Обработка операторов с учётом приоритета и ассоциативности
@@ -656,6 +727,9 @@ public function toReversePolishNotation(array $tokens): array
                 $output[] = array_pop($operators);
             }
             $operators[] = $token;
+            // После бинарного и префиксного оператора снова ждём операнд, а вот
+            // после постфиксного ('a++ - b') значение уже готово — там '-' бинарный.
+            $expectOperand = !in_array($tokenValue, self::POSTFIX_OPERATORS, true);
         }
     }
 
@@ -698,6 +772,13 @@ public function toReversePolishNotation(array $tokens): array
                 $stack[] = $token;
             } else {
                 $operator = $token->getValue();
+
+                // Без этой проверки неизвестный оператор давал warning об отсутствующем
+                // ключе и падал где-то дальше с ArgumentCountError вместо внятной ошибки.
+                if (!isset($this->operators[$operator])) {
+                    throw new InvalidArgumentException("Operator '$operator' is not defined.");
+                }
+
                 $operandCount = $this->operators[$operator]['operandCount'];
 
                 // Проверяем, достаточно ли операндов в стеке
@@ -799,6 +880,81 @@ public function toReversePolishNotation(array $tokens): array
         );
     }
 
+    /**
+     * Подставляет '{{ выражение }}' в строках разобранной JSON-структуры.
+     *
+     * Обходятся и значения, и ключи, на любой глубине вложенности.
+     */
+    private function interpolatePlaceholders(array $data): array
+    {
+        $result = [];
+
+        foreach ($data as $key => $value) {
+            $newKey = is_string($key) ? $this->interpolateText($key) : $key;
+
+            if (!is_string($newKey) && !is_int($newKey)) {
+                throw new InvalidArgumentException(
+                    "Placeholder in JSON key '$key' must produce a string or a number"
+                );
+            }
+
+            if (is_array($value)) {
+                $result[$newKey] = $this->interpolatePlaceholders($value);
+            } elseif (is_string($value)) {
+                $result[$newKey] = $this->interpolateText($value);
+            } else {
+                $result[$newKey] = $value;
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Вычисляет подстановки в одной строке.
+     *
+     * Если строка целиком состоит из одной подстановки, возвращается значение
+     * выражения СО СВОИМ ТИПОМ: денежная сумма останется строкой bcmath, целое —
+     * целым, массив — массивом. Если подстановка стоит внутри текста, склеиваются
+     * строковые представления — тип неизбежно теряется.
+     *
+     * @return mixed строка, либо значение единственной подстановки
+     */
+    private function interpolateText(string $text): mixed
+    {
+        if (!str_contains($text, '{{')) {
+            return $text; // Быстрый путь: подстановок нет.
+        }
+
+        $segments = LiteralScanner::splitPlaceholders($text);
+
+        if (count($segments) === 1 && $segments[0]['type'] === 'expr') {
+            $handler = $this->evaluateExpressionToHandler($segments[0]['value']);
+
+            return $handler === null ? null : $handler->get();
+        }
+
+        $out = '';
+
+        foreach ($segments as $segment) {
+            if ($segment['type'] === 'text') {
+                $out .= $segment['value'];
+                continue;
+            }
+
+            $handler = $this->evaluateExpressionToHandler($segment['value']);
+
+            if ($handler === null) {
+                continue;
+            }
+
+            $stringHandler = $handler->toString();
+            $out .= $stringHandler === null ? '' : (string) $stringHandler->get();
+        }
+
+        return $out;
+    }
+
     public function &resolveValue(Token $token): ?AbstractVariableHandler
     {
         $null = null;
@@ -880,6 +1036,23 @@ public function toReversePolishNotation(array $tokens): array
             // Возвращаем null-обработчик если метод не найден
             $null =$this->variableStorage->getVariable('null');
             return $null;
+        }
+
+        // Литерал массива: разбираем данные, затем подставляем '{{ ... }}'.
+        // Подстановка живёт здесь, а не в фабрике, потому что ей нужен интерпретатор
+        // для вычисления выражений, а фабрика о нём ничего не знает.
+        if ($token->getType() == 'array' && is_string($token->getValue())) {
+            $parsed = VariableHandlerFactory::parseArrayLiteral($token->getValue());
+            $interpolated = $this->interpolatePlaceholders($parsed);
+
+            $arrayHandler = new VarTypes\ArrayHandler(
+                'array_literal',
+                $interpolated,
+                null,
+                $this->variableStorage
+            );
+
+            return $arrayHandler;
         }
 
         // Обработка других типов токенов
