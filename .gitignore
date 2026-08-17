@@ -2,7 +2,7 @@
 
 # Личные настройки инструментария: содержат пути конкретной машины.
 # Общекомандный .claude/settings.json, наоборот, отслеживается.
-.claude/settings.local.json
+.claude/
 .mcp.json
 
 .phpunit.result.cache
