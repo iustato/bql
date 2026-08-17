@@ -32,7 +32,11 @@ class FunctionCallToken extends Token
     }
 
     /**
-     * Парсит аргументы функции как выражения
+     * Парсит аргументы функции как выражения.
+     *
+     * Разделитель — ',' на нулевой глубине: запятая внутри строки, вложенного
+     * массива или JSON-объекта аргументы не разделяет, поэтому
+     * 'iif(a, [{"x":1,"y":2}], 0)' — это три аргумента, а не четыре.
      */
     private function parseArgumentExpressions(string $argsString): array
     {
@@ -41,43 +45,12 @@ class FunctionCallToken extends Token
         }
 
         $args = [];
-        $currentArg = '';
-        $depth = 0;
-        $inString = false;
-        $stringChar = '';
 
-        for ($i = 0; $i < strlen($argsString); $i++) {
-            $char = $argsString[$i];
-
-            if (!$inString && ($char === '"' || $char === "'")) {
-                $inString = true;
-                $stringChar = $char;
-                $currentArg .= $char;
-            } elseif ($inString && $char === $stringChar) {
-                $inString = false;
-                $currentArg .= $char;
-            } elseif (!$inString && $char === '(') {
-                $depth++;
-                $currentArg .= $char;
-            } elseif (!$inString && $char === ')') {
-                $depth--;
-                $currentArg .= $char;
-            } elseif (!$inString && $char === ',' && $depth === 0) {
-                // Найден разделитель аргументов на верхнем уровне
-                $trimmedArg = trim($currentArg);
-                if ($trimmedArg !== '') {
-                    $args[] = $trimmedArg; // Сохраняем как строку выражения
-                }
-                $currentArg = '';
-            } else {
-                $currentArg .= $char;
+        foreach (LiteralScanner::splitTopLevel($argsString, ',') as $rawArg) {
+            $arg = trim($rawArg);
+            if ($arg !== '') {
+                $args[] = $arg; // Сохраняем как строку выражения
             }
-        }
-
-        // Добавляем последний аргумент
-        $trimmedArg = trim($currentArg);
-        if ($trimmedArg !== '') {
-            $args[] = $trimmedArg; // Сохраняем как строку выражения
         }
 
         return $args;
@@ -99,44 +72,20 @@ class FunctionCallToken extends Token
     }
 
     /**
-     * Выполняет каждый параметр как мини-выражение
+     * Выполняет каждый параметр как мини-выражение.
+     *
+     * Разбор и приведение к обработчику значения целиком делегированы
+     * интерпретатору — он одинаково разрешает переменные, вложенные вызовы,
+     * литералы массивов и switch.
      */
     public function evaluateParameters(ExpressionInterpreter $interpreter): array
     {
         $evaluatedParams = [];
-        $i = 0;
 
         foreach ($this->parameters as $parameter) {
-            // Каждый параметр - строка выражения, вычисляем её рекурсивно
-            $argTokens = $interpreter->tokenizeWithAutomaton($parameter);
-            
-            if (!empty($argTokens[0])) {
-                $argRPN = $interpreter->toReversePolishNotation($argTokens[0]);
-                $argResult = $interpreter->evaluateRPN($argRPN);
-                
-                // Преобразуем результат в AbstractVariableHandler если нужно
-                if ($argResult instanceof \iustato\Bql\VarTypes\AbstractVariableHandler) {
-                    $evaluatedParams[] = $argResult;
-                } else {
-                    // Создаем временный handler для результата
-                    $tempVars[$i] = $argResult;
-
-
-                    $evaluatedParams[] = \iustato\Bql\VariableHandlerFactory::createHandler(
-                        $tempVars[$i],
-                        'temp_arg'.$i,
-                        null,
-                        $interpreter->variableStorage
-                    );
-
-                }
-            } else {
-                $evaluatedParams[] = null;
-            }
-
-            $i++;
+            $evaluatedParams[] = $interpreter->evaluateExpressionToHandler($parameter);
         }
-        
+
         return $evaluatedParams;
     }
 

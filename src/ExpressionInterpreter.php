@@ -4,12 +4,41 @@ namespace iustato\Bql;
 
 use InvalidArgumentException;
 use iustato\Bql\VarTypes\BoolVarHandler;
+use iustato\Bql\VarTypes\NumVarHandler;
 use iustato\Bql\VarTypes\SimpleVarHandler;
 use LogicException;
 use iustato\Bql\VarTypes\AbstractVariableHandler;
 
 class ExpressionInterpreter
 {
+    /**
+     * Состояния-литералы: копят символы до парной закрывающей скобки.
+     *
+     * Значение — пара [открывающая, закрывающая]. Внутри таких состояний пробелы,
+     * ';' и скобки в строках частью структуры не являются (см. trackLiteralDepth()).
+     */
+    private const LITERAL_STATES = [
+        'array' => ['[', ']'],
+        'function_call' => ['(', ')'],
+        'switch_body' => ['{', '}'],
+    ];
+
+    /** Методы, вызываемые на переменной как 'var.toString()'. Единый список для обеих регулярок. */
+    private const VALUE_METHODS = ['toString', 'toNum', 'toJSON'];
+
+    /**
+     * Знак числа: во что переименовывается оператор, стоящий в позиции операнда.
+     *
+     * На уровне символов '-a' и 'a - b' не различить, поэтому токенайзер всегда
+     * отдаёт обычный '-', а решение принимает {@see toReversePolishNotation()}
+     * по позиции в потоке токенов. Отдельные имена нужны, чтобы у унарной формы
+     * были свои приоритет и количество операндов.
+     */
+    private const UNARY_SIGNS = ['-' => 'u-', '+' => 'u+'];
+
+    /** Постфиксные операторы: значение слева готово, следующий '-' — бинарный. */
+    private const POSTFIX_OPERATORS = ['++', '--'];
+
     public VariableStorage $variableStorage;
     private array $operators = [];
     private array $functions = [];
@@ -22,7 +51,7 @@ class ExpressionInterpreter
         // Приоритет: чем БОЛЬШЕ число, тем сильнее связывание (см. shunting-yard
         // в toReversePolishNotation). Порядок — как в большинстве языков:
         //   присваивание < ?? < || < && < равенство < сравнения
-        //     < + - . < * / < унарный ! < ++ --
+        //     < + - . < * / < унарные ! и знак числа < ++ --
         // Ключевое: арифметика связывается СИЛЬНЕЕ сравнений, поэтому
         // `1 + 2 == 3` разбирается как `(1 + 2) == 3`, а не `1 + (2 == 3)`.
 
@@ -65,6 +94,10 @@ class ExpressionInterpreter
 
         // Унарные (самый высокий приоритет).
         $this->registerOperator('!', 9, 'right', false, 1);
+        // Знак числа ('-5', 'a * -b', '-(a + b)'). Связывается сильнее умножения,
+        // поэтому '-2 * 3' — это '(-2) * 3'. См. UNARY_SIGNS.
+        $this->registerOperator('u-', 9, 'right', false, 1);
+        $this->registerOperator('u+', 9, 'right', false, 1);
         $this->registerOperator('++', 10, 'right', true, 1);
         $this->registerOperator('--', 10, 'right', true, 1);
 
@@ -125,20 +158,13 @@ class ExpressionInterpreter
             }
         }, 3, 3);
 
-        // Функция max
+        // Функции max и min — сравнение через bcmath, см. extremum().
         $this->registerFunction('max', function (...$args) {
-            $values = array_map(function ($arg) {
-                return $arg instanceof AbstractVariableHandler ? $arg->get() : $arg;
-            }, $args);
-            return max($values);
+            return $this->extremum($args, 1);
         }, 1);
 
-        // Функция min
         $this->registerFunction('min', function (...$args) {
-            $values = array_map(function ($arg) {
-                return $arg instanceof AbstractVariableHandler ? $arg->get() : $arg;
-            }, $args);
-            return min($values);
+            return $this->extremum($args, -1);
         }, 1);
 
         // Функция abs
@@ -155,6 +181,54 @@ class ExpressionInterpreter
             }
             return 0;
         }, 1, 1);
+    }
+
+    /**
+     * Общая реализация min/max: выбирает крайнее из чисел через bcmath.
+     *
+     * Нативные min()/max() тут не годятся: PHP сравнивает числовые строки,
+     * скатываясь к float, поэтому значения, различающиеся дальше 17-й значащей
+     * цифры, считались равными — и возвращался просто первый аргумент
+     * (`min(0.30000000000000001, 0.3)` отдавал первый). Оператор '<' на тех же
+     * числах отвечает верно (bccomp), а расхождение между функцией и оператором
+     * недопустимо. Результат нормализуется через present(), поэтому
+     * `min(10.0, 10)` — это int 10, а не строка '10.0'.
+     *
+     * @param array $args аргументы вызова: обработчики или готовые значения
+     * @param int $sign 1 — максимум, -1 — минимум (совпадает с кодом bccomp)
+     * @return mixed выбранное значение
+     */
+    private function extremum(array $args, int $sign)
+    {
+        $values = array_map(function ($arg) {
+            return $arg instanceof AbstractVariableHandler ? $arg->get() : $arg;
+        }, $args);
+
+        // Нечисловые аргументы (строки, массивы, даты) bcmath сравнивать не
+        // умеет — они остаются на нативных min()/max() с их правилами.
+        foreach ($values as $value) {
+            if (!self::isBcOperand($value)) {
+                return $sign > 0 ? max($values) : min($values);
+            }
+        }
+
+        $best = NumVarHandler::toNumericString(array_shift($values));
+
+        foreach ($values as $value) {
+            $candidate = NumVarHandler::toNumericString($value);
+            if (bccomp($candidate, $best, NumVarHandler::$scale) === $sign) {
+                $best = $candidate;
+            }
+        }
+
+        return NumVarHandler::present($best);
+    }
+
+    /** Годится ли значение как операнд bcmath (число или числовая строка). */
+    private static function isBcOperand($value): bool
+    {
+        return is_int($value) || is_float($value)
+            || (is_string($value) && is_numeric(trim($value)));
     }
 
 
@@ -271,6 +345,12 @@ class ExpressionInterpreter
                 $this->consumeMethodParams($st, $char);
                 continue;
             }
+            // Литералы забирают всё до своей закрывающей скобки — в том числе ';',
+            // который иначе разорвал бы команду посреди тела switch или JSON-строки.
+            if (isset(self::LITERAL_STATES[$st->name])) {
+                $this->advanceState($st, $char);
+                continue;
+            }
 
             // Конец команды.
             if ($char === ';') {
@@ -295,6 +375,11 @@ class ExpressionInterpreter
                     $this->advanceState($st, $char); // buffer .= '(' и depth++
                     continue;
                 }
+                if ($char === '{' && $this->isSwitchKeyword($st->buffer)) {
+                    // 'switch {' — начало тела switch с пробелом перед скобкой.
+                    $this->openSwitchBody($st);
+                    continue;
+                }
                 // Не скобка — идентификатор завершён, символ пересматриваем.
                 $st->name = 'identifier';
                 $this->flushToken($st);
@@ -302,15 +387,12 @@ class ExpressionInterpreter
                 continue;
             }
 
-            // Для литералов массива и вызова функции пробелы и скобки — часть токена.
-            $isLiteral = ($st->name === 'array' || $st->name === 'function_call');
-
-            if (!$isLiteral && ctype_space($char)) {
+            if (ctype_space($char)) {
                 $this->flushToken($st);
                 continue;
             }
 
-            if (!$isLiteral && ($char === '(' || $char === ')')) {
+            if ($char === '(' || $char === ')') {
                 // handleParenthesis() возвращает false только для 'identifier(' — тогда
                 // символ '(' нужно пробросить в состояние 'function_call' ниже.
                 if ($this->handleParenthesis($st, $char)) {
@@ -342,7 +424,16 @@ class ExpressionInterpreter
             $this->finalizeCurrentToken($st->tokens, $st->buffer, $st->name);
             $st->buffer = '';
         }
+        $this->resetToDefault($st);
+    }
+
+    /** Возвращает автомат в 'default', сбрасывая счётчики литерала. */
+    private function resetToDefault(TokenizerState $st): void
+    {
         $st->name = 'default';
+        $st->depth = 0;
+        $st->quote = '';
+        $st->escaped = false;
     }
 
     /**
@@ -356,10 +447,78 @@ class ExpressionInterpreter
         }
     }
 
-    /** Является ли буфер обращением к методу '.toString'/'.toNum'. */
+    /** Является ли буфер обращением к методу значения ('.toString', '.toJSON', ...). */
     private function isMethodCall(string $buffer): bool
     {
-        return (bool) preg_match('/\.(toString|toNum)$/', $buffer);
+        return (bool) preg_match('/\.(' . implode('|', self::VALUE_METHODS) . ')$/', $buffer);
+    }
+
+    /**
+     * Открыт ли конструкцией 'switch' — единственное место, где '{' начинает тело.
+     */
+    private function isSwitchKeyword(string $buffer): bool
+    {
+        return strtolower($buffer) === 'switch';
+    }
+
+    /**
+     * Переводит автомат в тело switch. Ключевое слово из буфера отбрасывается,
+     * в буфере остаётся сам блок '{...}' — его разберёт {@see SwitchToken}.
+     */
+    private function openSwitchBody(TokenizerState $st): void
+    {
+        $st->buffer = '{';
+        $st->name = 'switch_body';
+        $st->depth = 1;
+        $st->quote = '';
+        $st->escaped = false;
+    }
+
+    /**
+     * Отслеживает строки и вложенность внутри поглощающего литерала.
+     *
+     * Наивный подсчёт скобок ломается, если внутри литерала есть строка со скобкой
+     * или с ';' — поэтому строки распознаются здесь, и их содержимое на глубину не
+     * влияет. Кавычки обоих видов: одинарные — строки BQL, двойные — строки JSON.
+     *
+     * @return bool true, если литерал закрылся на этом символе
+     */
+    private function trackLiteralDepth(TokenizerState $st, string $char, string $open, string $close): bool
+    {
+        // Внутри строки ищем только её конец, учитывая экранирование.
+        if ($st->quote !== '') {
+            if ($st->escaped) {
+                $st->escaped = false;
+            } elseif ($char === '\\') {
+                $st->escaped = true;
+            } elseif ($char === $st->quote) {
+                $st->quote = '';
+            }
+            return false;
+        }
+
+        if ($char === "'" || $char === '"') {
+            $st->quote = $char;
+            return false;
+        }
+
+        if ($char === $open) {
+            $st->depth++;
+        } elseif ($char === $close) {
+            return --$st->depth <= 0;
+        }
+
+        return false;
+    }
+
+    /** Создаёт токен завершённого литерала по имени состояния. */
+    private function makeLiteralToken(string $state, string $buffer): Token
+    {
+        return match ($state) {
+            'array' => new Token('array', $buffer),
+            'function_call' => new FunctionCallToken($buffer),
+            'switch_body' => new SwitchToken($buffer),
+        };
     }
 
     /** Состояние 'string': копим символы до закрывающей кавычки. */
@@ -447,16 +606,18 @@ class ExpressionInterpreter
                 }
                 break;
 
+            // Литералы: '[...]', 'name(...)', 'switch {...}'. Копим до парной
+            // закрывающей скобки, не считая скобок внутри строк.
             case 'array':
+            case 'function_call':
+            case 'switch_body':
                 $st->buffer .= $char;
-                if ($char === ']') {
-                    if (--$st->depth <= 0) {
-                        $st->tokens[] = new Token('array', $st->buffer);
-                        $st->buffer = '';
-                        $st->name = 'default';
-                    }
-                } elseif ($char === '[') {
-                    $st->depth++;
+                [$open, $close] = self::LITERAL_STATES[$st->name];
+                if ($this->trackLiteralDepth($st, $char, $open, $close)) {
+                    $token = $this->makeLiteralToken($st->name, $st->buffer);
+                    $st->buffer = '';
+                    $this->resetToDefault($st);
+                    $st->tokens[] = $token;
                 }
                 break;
 
@@ -466,6 +627,9 @@ class ExpressionInterpreter
                 } elseif ($char === '.') {
                     $st->buffer .= $char;
                     $st->name = 'sausage';
+                } elseif ($char === '{' && $this->isSwitchKeyword($st->buffer)) {
+                    // 'switch{' — единственный случай, когда '{' начинает конструкцию.
+                    $this->openSwitchBody($st);
                 } else {
                     $st->tokens[] = new Token('identifier', $st->buffer);
                     $this->resetForReconsider($st);
@@ -493,19 +657,6 @@ class ExpressionInterpreter
                     $this->resetForReconsider($st);
                 }
                 break;
-
-            case 'function_call':
-                $st->buffer .= $char;
-                if ($char === '(') {
-                    $st->depth++;
-                } elseif ($char === ')') {
-                    if (--$st->depth <= 0) {
-                        $st->tokens[] = new FunctionCallToken($st->buffer);
-                        $st->buffer = '';
-                        $st->name = 'default';
-                    }
-                }
-                break;
         }
     }
 
@@ -522,20 +673,31 @@ public function toReversePolishNotation(array $tokens): array
 {
     $output = [];
     $operators = [];
+    // Ждём ли операнд. В начале выражения — да, поэтому '-' здесь знак числа,
+    // а не вычитание. Дальше флаг переключается по ходу потока токенов.
+    $expectOperand = true;
 
     foreach ($tokens as $token) {
         /*  @var  Token $token */
         $tokenType = $token->getType();
         $tokenValue = $token->getValue();
 
+        // Знак в позиции операнда — унарная форма: '-5', 'a * -b', '-(a + b)'.
+        if ($tokenType === 'operator' && $expectOperand && isset(self::UNARY_SIGNS[$tokenValue])) {
+            $tokenValue = self::UNARY_SIGNS[$tokenValue];
+            $token = new Token('operator', $tokenValue);
+        }
+
         // Функции и другие не-операторы идут прямо в вывод
         if ($tokenType !== 'operator' && $tokenType !== 'parenthesis') {
             $output[] = $token;
-        } 
+            $expectOperand = false;
+        }
         // Открывающая скобка (не функция)
         elseif ($tokenValue === '(') {
             $operators[] = $token;
-        } 
+            $expectOperand = true;
+        }
         // Закрывающая скобка
         elseif ($tokenValue === ')') {
             // Выталкиваем операторы до открывающей скобки
@@ -544,9 +706,10 @@ public function toReversePolishNotation(array $tokens): array
             }
             // Удаляем открывающую скобку
             if (!empty($operators)) {
-                array_pop($operators); 
+                array_pop($operators);
             }
-        } 
+            $expectOperand = false;
+        }
         // Операторы
         else {
             // Обработка операторов с учётом приоритета и ассоциативности
@@ -564,6 +727,9 @@ public function toReversePolishNotation(array $tokens): array
                 $output[] = array_pop($operators);
             }
             $operators[] = $token;
+            // После бинарного и префиксного оператора снова ждём операнд, а вот
+            // после постфиксного ('a++ - b') значение уже готово — там '-' бинарный.
+            $expectOperand = !in_array($tokenValue, self::POSTFIX_OPERATORS, true);
         }
     }
 
@@ -577,6 +743,27 @@ public function toReversePolishNotation(array $tokens): array
 
     public function evaluateRPN(array $rpn)
     {
+        $token = $this->evaluateRPNToToken($rpn);
+
+        if ($token === null) {
+            return null;
+        }
+
+        if ($this->isDeferredToken($token)) {
+            return $this->resolveValue($token);
+        }
+
+        return $token->getValue();
+    }
+
+    /**
+     * Прогоняет ОПН через стек и возвращает токен-результат (или null, если стек пуст).
+     *
+     * Отделено от evaluateRPN(), чтобы вызывающий мог решить сам, что делать с
+     * итоговым токеном: развернуть в «сырое» значение или в обработчик значения.
+     */
+    private function evaluateRPNToToken(array $rpn): ?Token
+    {
         $stack = [];
 
         foreach ($rpn as $token) {
@@ -585,6 +772,13 @@ public function toReversePolishNotation(array $tokens): array
                 $stack[] = $token;
             } else {
                 $operator = $token->getValue();
+
+                // Без этой проверки неизвестный оператор давал warning об отсутствующем
+                // ключе и падал где-то дальше с ArgumentCountError вместо внятной ошибки.
+                if (!isset($this->operators[$operator])) {
+                    throw new InvalidArgumentException("Operator '$operator' is not defined.");
+                }
+
                 $operandCount = $this->operators[$operator]['operandCount'];
 
                 // Проверяем, достаточно ли операндов в стеке
@@ -627,23 +821,138 @@ public function toReversePolishNotation(array $tokens): array
             throw new LogicException("Invalid RPN evaluation. Stack state: " . var_export($stack, true));
         }*/
 
-        if (count($stack) > 0) {
+        return count($stack) > 0 ? array_pop($stack) : null;
+    }
 
-            $token_var = array_pop($stack);
+    /**
+     * Ссылается ли токен на ещё не вычисленное значение.
+     *
+     * Такие токены несут имя/путь/тело, а не значение, поэтому на вершине стека их
+     * надо доразрешить через resolveValue(). Раньше так обрабатывался только
+     * 'sausage', из-за чего 'iif(a, 5, 9)' получал строку 'a' вместо значения `a`
+     * и любое условие из одной переменной молча считалось ложным.
+     *
+     * Тип 'array' сюда намеренно не входит: у литерала '[1,2]' значение — это текст
+     * литерала, а у результата операции — уже настоящий PHP-массив, и различить их
+     * по типу нельзя. Проверка is_string() страхует от того же на остальных типах.
+     */
+    private function isDeferredToken(Token $token): bool
+    {
+        return in_array($token->getType(), ['identifier', 'sausage', 'function_call', 'method_call', 'switch'], true)
+            && is_string($token->getValue());
+    }
 
-            if ($token_var instanceof Token && $token_var->getType() == 'sausage')
-            {
-                $var = $this->resolveValue($token_var);
-            }
-            else
-            {
-                $var = $token_var->getValue();
-            }
+    /**
+     * Вычисляет строку-подвыражение и возвращает обработчик значения.
+     *
+     * Нужен там, где подвыражение — часть большей конструкции: аргументы функций и
+     * плечи switch. В отличие от evaluateRPN() корректно отдаёт и литералы массивов:
+     * '[{"a":1}]' превращается в ArrayHandler, а не в текст литерала.
+     */
+    public function evaluateExpressionToHandler(string $expression): ?AbstractVariableHandler
+    {
+        $commands = $this->tokenizeWithAutomaton($expression);
 
-            return $var;    //array_pop($stack)->getValue();
-        } else {
+        if (empty($commands[0])) {
             return null;
         }
+
+        $token = $this->evaluateRPNToToken($this->toReversePolishNotation($commands[0]));
+
+        if ($token === null) {
+            return null;
+        }
+
+        // Ссылки и литералы разрешает resolveValue(): она знает, как превратить
+        // путь, вызов или текст '[{"a":1}]' в обработчик нужного типа.
+        if ($this->isDeferredToken($token) || $token->getType() === 'array') {
+            return $this->resolveValue($token);
+        }
+
+        // Остальное на вершине стека — уже посчитанное значение.
+        $value = $token->getValue();
+
+        return VariableHandlerFactory::createHandler(
+            $value,
+            'expression_result',
+            null,
+            $this->variableStorage
+        );
+    }
+
+    /**
+     * Подставляет '{{ выражение }}' в строках разобранной JSON-структуры.
+     *
+     * Обходятся и значения, и ключи, на любой глубине вложенности.
+     */
+    private function interpolatePlaceholders(array $data): array
+    {
+        $result = [];
+
+        foreach ($data as $key => $value) {
+            $newKey = is_string($key) ? $this->interpolateText($key) : $key;
+
+            if (!is_string($newKey) && !is_int($newKey)) {
+                throw new InvalidArgumentException(
+                    "Placeholder in JSON key '$key' must produce a string or a number"
+                );
+            }
+
+            if (is_array($value)) {
+                $result[$newKey] = $this->interpolatePlaceholders($value);
+            } elseif (is_string($value)) {
+                $result[$newKey] = $this->interpolateText($value);
+            } else {
+                $result[$newKey] = $value;
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Вычисляет подстановки в одной строке.
+     *
+     * Если строка целиком состоит из одной подстановки, возвращается значение
+     * выражения СО СВОИМ ТИПОМ: денежная сумма останется строкой bcmath, целое —
+     * целым, массив — массивом. Если подстановка стоит внутри текста, склеиваются
+     * строковые представления — тип неизбежно теряется.
+     *
+     * @return mixed строка, либо значение единственной подстановки
+     */
+    private function interpolateText(string $text): mixed
+    {
+        if (!str_contains($text, '{{')) {
+            return $text; // Быстрый путь: подстановок нет.
+        }
+
+        $segments = LiteralScanner::splitPlaceholders($text);
+
+        if (count($segments) === 1 && $segments[0]['type'] === 'expr') {
+            $handler = $this->evaluateExpressionToHandler($segments[0]['value']);
+
+            return $handler === null ? null : $handler->get();
+        }
+
+        $out = '';
+
+        foreach ($segments as $segment) {
+            if ($segment['type'] === 'text') {
+                $out .= $segment['value'];
+                continue;
+            }
+
+            $handler = $this->evaluateExpressionToHandler($segment['value']);
+
+            if ($handler === null) {
+                continue;
+            }
+
+            $stringHandler = $handler->toString();
+            $out .= $stringHandler === null ? '' : (string) $stringHandler->get();
+        }
+
+        return $out;
     }
 
     public function &resolveValue(Token $token): ?AbstractVariableHandler
@@ -663,12 +972,25 @@ public function toReversePolishNotation(array $tokens): array
             return $result;
         }
 
+        // switch как выражение: сам выбирает плечо и возвращает его значение.
+        if ($token instanceof SwitchToken) {
+            $result = $token->evaluate($this);
+
+            if ($result === null) {
+                // Ни одно условие не подошло и нет 'default'.
+                $null = $this->variableStorage->getVariable('null');
+                return $null;
+            }
+
+            return $result;
+        }
+
         if ($token->getType() == 'method_call') {
-            // Обработка вызовов методов .toString() и .toNum()
+            // Обработка вызовов методов значения: .toString(), .toNum(), .toJSON()
             $methodCall = $token->getValue();
 
             // Извлекаем переменную и метод
-            if (preg_match('/^(.+)\.(toString|toNum)\(\)$/', $methodCall, $matches)) {
+            if (preg_match('/^(.+)\.(' . implode('|', self::VALUE_METHODS) . ')\(\)$/', $methodCall, $matches)) {
                 $variableName = $matches[1];
                 $methodName = $matches[2];
 
@@ -681,13 +1003,10 @@ public function toReversePolishNotation(array $tokens): array
 
                 //VariableHandlerFactory::createHandler($variableName,$variableName,null,$this->variableStorage);
                 if ($variableHandler) {
-                    if ($methodName === 'toString') {
-                        $result = $variableHandler->toString();
-                        return $result;
-                    } elseif ($methodName === 'toNum') {
-                        $result = $variableHandler->toNum();
-                        return $result;
-                    }
+                    // Имена в VALUE_METHODS совпадают с именами методов обработчика,
+                    // поэтому вызываем напрямую — список сверху и служит белым списком.
+                    $result = $variableHandler->$methodName();
+                    return $result;
                 }
 
 
@@ -709,19 +1028,31 @@ public function toReversePolishNotation(array $tokens): array
                     $this->variableStorage->markUsed($variableName, $baseHandler->get());
 
                     // Вызываем соответствующий метод и возвращаем результат
-                    if ($methodName === 'toString') {
-                        $result = $baseHandler->toString();
-                        return $result;
-                    } elseif ($methodName === 'toNum') {
-                        $result = $baseHandler->toNum();
-                        return $result;
-                    }
+                    $result = $baseHandler->$methodName();
+                    return $result;
                 }
             }
 
             // Возвращаем null-обработчик если метод не найден
             $null =$this->variableStorage->getVariable('null');
             return $null;
+        }
+
+        // Литерал массива: разбираем данные, затем подставляем '{{ ... }}'.
+        // Подстановка живёт здесь, а не в фабрике, потому что ей нужен интерпретатор
+        // для вычисления выражений, а фабрика о нём ничего не знает.
+        if ($token->getType() == 'array' && is_string($token->getValue())) {
+            $parsed = VariableHandlerFactory::parseArrayLiteral($token->getValue());
+            $interpolated = $this->interpolatePlaceholders($parsed);
+
+            $arrayHandler = new VarTypes\ArrayHandler(
+                'array_literal',
+                $interpolated,
+                null,
+                $this->variableStorage
+            );
+
+            return $arrayHandler;
         }
 
         // Обработка других типов токенов
@@ -796,6 +1127,12 @@ public function toReversePolishNotation(array $tokens): array
                 // Создаем FunctionCallToken, который сам парсит вызов
                 $tokens[] = new FunctionCallToken($currentToken);
                 break;
+            case 'switch_body':
+                // Сюда попадаем только при незакрытой '}' — иначе токен уже создан
+                // в advanceState(). Явная ошибка понятнее, чем разбор огрызка.
+                throw new InvalidArgumentException(
+                    "Unterminated switch block: missing closing '}' in '$currentToken'"
+                );
             default:
                 if ($currentToken !== '') {
                     $tokens[] = new Token($state, $currentToken);

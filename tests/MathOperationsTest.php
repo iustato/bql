@@ -149,6 +149,77 @@ class MathOperationsTest extends TestCase
         $this->assertSame('99999999980000000001', $this->results['mul']);
     }
 
+    /**
+     * Унарный минус — знак числа.
+     *
+     * Токенайзер отдаёт обычный '-'; унарную форму ('u-') распознаёт
+     * toReversePolishNotation() по позиции в потоке токенов.
+     */
+    public function testUnaryMinus(): void
+    {
+        $this->interpreter->evaluate("results.lit = -5");
+        $this->assertSame(-5, $this->results['lit']);
+
+        $this->interpreter->evaluate("results.dec = -5.25");
+        $this->assertSame('-5.25', $this->results['dec']);
+
+        $this->interpreter->evaluate("results.var = -a");
+        $this->assertSame(-10, $this->results['var']);
+
+        // Знак связывается сильнее умножения: (-2) * 3.
+        $this->interpreter->evaluate("results.mul = -2 * 3");
+        $this->assertSame(-6, $this->results['mul']);
+
+        // Знак справа от бинарного оператора.
+        $this->interpreter->evaluate("results.sub = 2 - -3");
+        $this->assertSame(5, $this->results['sub']);
+
+        $this->interpreter->evaluate("results.mixed = a * -b");
+        $this->assertSame(-50, $this->results['mixed']);
+
+        // Знак перед скобкой.
+        $this->interpreter->evaluate("results.paren = -(a + b)");
+        $this->assertSame(-15, $this->results['paren']);
+
+        // Унарный плюс — тождество.
+        $this->interpreter->evaluate("results.plus = +7");
+        $this->assertSame(7, $this->results['plus']);
+
+        // Дробный знак идёт через bcmath: -0.1 + 0.3 = 0.2 ровно.
+        $this->interpreter->evaluate("results.bc = -0.1 + 0.3");
+        $this->assertSame('0.2', $this->results['bc']);
+    }
+
+    /** Бинарный минус не превращается в знак там, где слева уже есть значение. */
+    public function testUnaryMinusDoesNotBreakBinaryMinus(): void
+    {
+        $this->interpreter->evaluate("results.bin = a - b");
+        $this->assertSame(5, $this->results['bin']);
+
+        // Пробел только слева — всё равно вычитание.
+        $this->interpreter->evaluate("results.tight = a -b");
+        $this->assertSame(5, $this->results['tight']);
+
+        // После постфиксного '++' значение готово, значит '-' бинарный.
+        $this->interpreter->setVariables(['n' => 10]);
+        $this->interpreter->evaluate("results.post = n++ - b");
+        $this->assertSame(6, $this->results['post']); // n стал 11, 11 - 5
+
+        // '--x' — это декремент, а не двойной знак.
+        $this->interpreter->setVariables(['x' => 7]);
+        $this->interpreter->evaluate("results.pre = --x");
+        $this->assertSame(6, $this->results['pre']);
+    }
+
+    /** Знак не мутирует переменную, в отличие от '++'/'--'. */
+    public function testUnaryMinusDoesNotModifyVariable(): void
+    {
+        $this->interpreter->evaluate("results.neg = -price; results.same = price");
+
+        $this->assertSame('-2.5', $this->results['neg']);
+        $this->assertSame('2.5', $this->results['same']);
+    }
+
     /** Унарный инкремент десятичного числа. */
     public function testDecimalIncrement(): void
     {

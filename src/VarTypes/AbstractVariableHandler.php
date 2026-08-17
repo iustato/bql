@@ -33,6 +33,9 @@ abstract class AbstractVariableHandler
 
     /**
      * Сохранение значения по ключу.
+     *
+     * Пустой ключ означает «заменить значение целиком» — так же, как в get().
+     * Именно так приходит присваивание всей переменной из VariableStorage.
      */
     abstract public function set(string $key, &$value, bool $setCurrent = false): void;
 
@@ -54,6 +57,20 @@ abstract class AbstractVariableHandler
     abstract public function toString() : ?StringVarHandler;
 
     abstract public function toNum() : ?NumVarHandler;
+
+    /**
+     * JSON-представление значения.
+     *
+     * Реализация по умолчанию годится для всех типов, потому что json_encode()
+     * одинаково справляется и со скаляром, и с (вложенным) массивом. Переопределяй
+     * только там, где нужно другое представление.
+     */
+    public function toJSON() : ?StringVarHandler
+    {
+        $value = json_encode($this->get(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        return new StringVarHandler('temp', $value, null, $this->storage);
+    }
 
     abstract public function convertToMe (AbstractVariableHandler $var);
 
