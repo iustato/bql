@@ -123,10 +123,11 @@ class SausageVarHandler extends AbstractVariableHandler
             $this->storage->markUsed($this->originalIdentifier, $actualValue);
         }
 
-        if (empty($key)) {
+        // Сравнение с '', а не empty(): '0' — валидный индекс, но «пустое» значение.
+        if ($key === '') {
             return $handler->get();
         }
-        
+
         return $handler->get($key);
     }
 
@@ -142,7 +143,7 @@ class SausageVarHandler extends AbstractVariableHandler
         if (count($this->keys) === 2) {
             $targetKey = $this->keys[1];
             
-            if (empty($key) || $setCurrent) {
+            if ($key === '' || $setCurrent) {
                 // Записываем значение напрямую в свойство корневого объекта
                 if (is_scalar($value) || is_null($value)) {
                     $scalarValue = $value;
@@ -208,7 +209,7 @@ class SausageVarHandler extends AbstractVariableHandler
         // Устанавливаем значение для последнего ключа
         $lastKey = end($this->keys);
         
-        if ($setCurrent || empty($key)) {
+        if ($setCurrent || $key === '') {
             // Записываем значение в конечное свойство
             $currentHandler->set($lastKey, $value, true);
         } else {
@@ -248,7 +249,7 @@ class SausageVarHandler extends AbstractVariableHandler
             return '';
         }
 
-        if (empty($key)) {
+        if ($key === '') {
             return 'exists'; // Сам элемент существует
         }
 

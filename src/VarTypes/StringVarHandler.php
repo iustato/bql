@@ -81,6 +81,8 @@ class StringVarHandler extends SimpleVarHandler
         {
             case '++':
             case '--':
+            case 'u-':
+            case 'u+':
                 // Приводим строку к числу и выполняем унарную операцию
                 $numHandler = $this->toNum();
                 return $numHandler->operatorUnaryCall($operator);

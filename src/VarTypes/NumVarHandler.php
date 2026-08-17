@@ -223,6 +223,11 @@ class NumVarHandler extends SimpleVarHandler
             case '--':
                 $this->var = self::present(self::normalize(bcsub($this->selfString(), '1', self::$scale)));
                 return $this;
+            case 'u-':
+                // Знак числа: переменную не меняем, отдаём новое значение.
+                return $this->makeNumber(bcsub('0', $this->selfString(), self::$scale));
+            case 'u+':
+                return $this->makeNumber($this->selfString());
 
             default:
                 throw new \Exception("incorrect unary operator ".$operator." for ".__CLASS__);
